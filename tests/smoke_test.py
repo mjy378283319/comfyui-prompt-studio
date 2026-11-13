@@ -152,6 +152,33 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_data_url("!!!not-base64!!!")
 
+    def test_boudoir_terms(self):
+        group_ids = {g["id"] for layer in LEX.layers for g in layer["groups"]}
+        self.assertTrue({"boudoir", "boudoir_scene", "boudoir_light"} <= group_ids)
+        for term in ("sheer layered fabric", "partial coverage by fabric", "bias-cut silk",
+                     "boudoir setting", "steam-filled bathroom", "soft backlight through sheer curtain",
+                     "low-key boudoir lighting", "natural skin texture"):
+            self.assertIsNotNone(LEX.lookup(term), term)
+            self.assertFalse(LEX.is_blocked(term), term)
+
+        presets = json.loads((ROOT / "data" / "presets.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(presets), 6)
+        boudoir = [p for p in presets if p["id"].startswith("builtin_boudoir_")]
+        self.assertEqual(len(boudoir), 2)
+        for preset in boudoir:
+            result = compose({"selections": preset["selections"], "mode": preset["mode"],
+                              "model": preset["model"], "syntax": preset["syntax"]}, LEX)
+            self.assertTrue(result["positive"])
+            self.assertNotIn("过滤", " ".join(result["warnings"]))
+        self.assertIn("私房", (ROOT / "data" / "guide.md").read_text(encoding="utf-8"))
+
+        # 新增光影词纳入冲突检测
+        conflict = compose({
+            "selections": {"photo": ["soft backlight through sheer curtain", "low-key boudoir lighting"]},
+            "mode": "tag",
+        }, LEX)
+        self.assertIn("光影方向", " ".join(conflict["warnings"]))
+
     def test_auth_primitives(self):
         stored = hash_password("Passw0rd!")
         self.assertTrue(stored.startswith("pbkdf2_sha256$"))

@@ -7,10 +7,36 @@
     "model": "sdxl",
     "syntax": "paren_weight",
     "selections": {
-      "identity": ["28-year-old woman", "dark brown hair", "long wavy hair", "high cheekbones", "slender build", "faint smile"],
-      "attire": ["linen shirt", "crisp linen", "ivory tones", "no accessories"],
-      "pose_scene": ["reclining on a bed", "bedroom", "linen bedding", "golden hour", "sheer curtains", "quiet intimacy"],
-      "photo": ["soft window light from the left", "85mm f/1.4 portrait lens", "natural skin texture", "visible pores", "photorealistic", "editorial color grading"]
+      "identity": [
+        "28-year-old woman",
+        "dark brown hair",
+        "long wavy hair",
+        "high cheekbones",
+        "slender build",
+        "faint smile"
+      ],
+      "attire": [
+        "linen shirt",
+        "crisp linen",
+        "ivory tones",
+        "no accessories"
+      ],
+      "pose_scene": [
+        "reclining on a bed",
+        "bedroom",
+        "linen bedding",
+        "golden hour",
+        "sheer curtains",
+        "quiet intimacy"
+      ],
+      "photo": [
+        "soft window light from the left",
+        "85mm f/1.4 portrait lens",
+        "natural skin texture",
+        "visible pores",
+        "photorealistic",
+        "editorial color grading"
+      ]
     }
   },
   {
@@ -21,10 +47,35 @@
     "model": "flux",
     "syntax": "plain",
     "selections": {
-      "identity": ["35-year-old woman", "black hair", "low bun", "almond-shaped eyes", "elegant neck line", "looking away"],
-      "attire": ["wrapped in a robe", "heavy satin", "deep burgundy", "layered outfit"],
-      "pose_scene": ["leaning on a windowsill", "bathroom with tiles", "overcast morning", "soft steam", "editorial calm"],
-      "photo": ["diffused overhead light", "50mm f/1.8", "natural skin texture", "soft specular highlights", "fine film grain", "fine-art portrait"]
+      "identity": [
+        "35-year-old woman",
+        "black hair",
+        "low bun",
+        "almond-shaped eyes",
+        "elegant neck line",
+        "looking away"
+      ],
+      "attire": [
+        "wrapped in a robe",
+        "heavy satin",
+        "deep burgundy",
+        "layered outfit"
+      ],
+      "pose_scene": [
+        "leaning on a windowsill",
+        "bathroom with tiles",
+        "overcast morning",
+        "soft steam",
+        "editorial calm"
+      ],
+      "photo": [
+        "diffused overhead light",
+        "50mm f/1.8",
+        "natural skin texture",
+        "soft specular highlights",
+        "fine film grain",
+        "fine-art portrait"
+      ]
     }
   },
   {
@@ -35,10 +86,35 @@
     "model": "sdxl",
     "syntax": "paren_weight",
     "selections": {
-      "identity": ["adult man", "side-parted hair", "defined brows", "broad shoulders", "direct eye contact"],
-      "attire": ["cashmere sweater", "fine-knit cashmere", "charcoal tones", "tailored blazer", "leather wristwatch"],
-      "pose_scene": ["standing with shoulders turned", "minimalist studio", "midday shade", "no props", "restrained elegance"],
-      "photo": ["Rembrandt lighting", "135mm f/2", "subtle peach fuzz", "no over-smoothing", "ultra-detailed", "fashion editorial"]
+      "identity": [
+        "adult man",
+        "side-parted hair",
+        "defined brows",
+        "broad shoulders",
+        "direct eye contact"
+      ],
+      "attire": [
+        "cashmere sweater",
+        "fine-knit cashmere",
+        "charcoal tones",
+        "tailored blazer",
+        "leather wristwatch"
+      ],
+      "pose_scene": [
+        "standing with shoulders turned",
+        "minimalist studio",
+        "midday shade",
+        "no props",
+        "restrained elegance"
+      ],
+      "photo": [
+        "Rembrandt lighting",
+        "135mm f/2",
+        "subtle peach fuzz",
+        "no over-smoothing",
+        "ultra-detailed",
+        "fashion editorial"
+      ]
     }
   },
   {
@@ -49,10 +125,112 @@
     "model": "flux",
     "syntax": "plain",
     "selections": {
-      "identity": ["42-year-old woman", "ash grey hair", "shoulder-length hair", "soft jawline", "balanced proportions", "pensive expression"],
-      "attire": ["slip dress", "matte silk", "tonal monochrome", "draped shawl"],
-      "pose_scene": ["kneeling by the window", "floor-to-ceiling window", "blue hour", "sheer curtains", "soft melancholy"],
-      "photo": ["backlit rim light", "medium format look", "natural skin tone variation", "clean shadow roll-off", "cinematic still"]
+      "identity": [
+        "42-year-old woman",
+        "ash grey hair",
+        "shoulder-length hair",
+        "soft jawline",
+        "balanced proportions",
+        "pensive expression"
+      ],
+      "attire": [
+        "slip dress",
+        "matte silk",
+        "tonal monochrome",
+        "draped shawl"
+      ],
+      "pose_scene": [
+        "kneeling by the window",
+        "floor-to-ceiling window",
+        "blue hour",
+        "sheer curtains",
+        "soft melancholy"
+      ],
+      "photo": [
+        "backlit rim light",
+        "medium format look",
+        "natural skin tone variation",
+        "clean shadow roll-off",
+        "cinematic still"
+      ]
+    }
+  },
+  {
+    "id": "builtin_boudoir_window",
+    "name": "私房 · 纱帘逆光",
+    "builtin": true,
+    "mode": "tag",
+    "model": "sdxl",
+    "syntax": "paren_weight",
+    "selections": {
+      "identity": [
+        "35-year-old woman",
+        "chestnut hair",
+        "long wavy hair",
+        "soft jawline",
+        "slender build",
+        "looking away"
+      ],
+      "attire": [
+        "sheer layered fabric",
+        "bias-cut silk",
+        "partial coverage by fabric",
+        "ivory tones"
+      ],
+      "pose_scene": [
+        "boudoir setting",
+        "leaning into the window light",
+        "half-drawn curtains",
+        "morning stillness",
+        "quiet intimacy"
+      ],
+      "photo": [
+        "soft backlight through sheer curtain",
+        "85mm f/1.4 portrait lens",
+        "natural skin texture",
+        "warm skin highlights",
+        "creamy bokeh",
+        "editorial boudoir photography"
+      ]
+    }
+  },
+  {
+    "id": "builtin_boudoir_bath",
+    "name": "私房 · 晨间水汽",
+    "builtin": true,
+    "mode": "natural",
+    "model": "flux",
+    "syntax": "plain",
+    "selections": {
+      "identity": [
+        "42-year-old woman",
+        "black hair",
+        "low bun",
+        "almond-shaped eyes",
+        "elegant neck line",
+        "pensive expression"
+      ],
+      "attire": [
+        "draped robe",
+        "matte silk",
+        "tonal monochrome",
+        "fabric folds catching light"
+      ],
+      "pose_scene": [
+        "steam-filled bathroom",
+        "soft bedside lamplight",
+        "morning stillness",
+        "no props",
+        "restrained elegance"
+      ],
+      "photo": [
+        "low-key boudoir lighting",
+        "50mm f/1.8",
+        "subtle shadow falloff across fabric",
+        "fine film grain",
+        "natural skin texture",
+        "fine-art portrait"
+      ]
     }
   }
 ]

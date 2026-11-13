@@ -14,10 +14,12 @@ CONFLICT_GROUPS: list[tuple[set[str], str]] = [
         "soft window light from the left", "backlit rim light", "diffused overhead light",
         "warm side lighting", "Rembrandt lighting", "gentle fill light",
         "low-key chiaroscuro", "golden hour backlight",
+        "soft backlight through sheer curtain", "low-key boudoir lighting",
     }, "光影方向"),
     ({
         "crisp linen", "washed cotton", "heavy satin", "sheer chiffon",
         "fine-knit cashmere", "ribbed wool", "matte silk", "delicate lace",
+        "sheer layered fabric", "bias-cut silk", "unstructured linen layers",
     }, "布料材质"),
     ({
         "85mm f/1.4 portrait lens", "50mm f/1.8", "135mm f/2",

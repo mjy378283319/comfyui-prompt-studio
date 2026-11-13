@@ -103,6 +103,40 @@ natural unretouched skin texture with finely visible pores, restrained editorial
 
 ---
 
+## 五之二、私房 / 氛围感成年人像怎么写
+
+氛围感不靠暴露，靠**遮蔽关系 + 光比 + 材质透光**这三件事。词库里的「私房层次 / 私房氛围 / 私房光影」三组只收摄影术语，
+描述的是布料怎么搭、光从哪来、暗部怎么过渡，不是内容尺度。
+
+**三条要点**
+
+1. **遮蔽写「层次」不写「缺少」**：`partial coverage by fabric` / `sheer layered fabric` / `draped robe` /
+   `unstructured linen layers`。先交代哪一层布、怎么垂、哪一层透光，画面才有可拍的形体。
+2. **光比要大、光源要单一**：`soft backlight through sheer curtain` 或 `low-key boudoir lighting` 只选一个，
+   再配 `gentle fill light` 提暗部。`subtle shadow falloff across fabric` 负责让布料有厚度。
+3. **皮肤纹理不能让位给氛围**：`natural skin texture, visible pores, no over-smoothing` 照样要写，
+   否则弱光下模型会自动磨成蜡像。
+
+**场景只给线索，不写剧情**：`boudoir setting` / `half-drawn curtains` / `steam-filled bathroom` /
+`soft bedside lamplight` / `morning stillness`，一两个就够，多了会抢主体。
+
+**示例（四层照排）**
+
+```
+① 35-year-old woman, chestnut hair, long wavy hair, soft jawline, slender build, looking away
+② sheer layered fabric, bias-cut silk, partial coverage by fabric, ivory tones
+③ boudoir setting, leaning into the window light, half-drawn curtains, morning stillness
+④ soft backlight through sheer curtain, 85mm f/1.4 portrait lens,
+   natural skin texture, warm skin highlights, creamy bokeh, editorial boudoir photography
+```
+
+「私房 · 纱帘逆光」「私房 · 晨间水汽」两套内置预设就是按这个结构搭的，可直接载入后单变量替换。
+冲突检测会把同组里同时选两个方向光、或同时选三种布料的情况标出来——氛围片最怕光向打架。
+
+> 边界：本工具不收录露骨或未成年相关标签，反推结果与补充词也会按同一规则过滤。
+
+---
+
 ## 六、迭代方法
 
 1. 固定 seed、CFG、步数，只改一个层的一个词条。
