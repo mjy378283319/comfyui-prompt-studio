@@ -162,7 +162,7 @@ class CoreTests(unittest.TestCase):
             self.assertFalse(LEX.is_blocked(term), term)
 
         presets = json.loads((ROOT / "data" / "presets.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(presets), 6)
+        self.assertEqual(len(presets), 7)
         boudoir = [p for p in presets if p["id"].startswith("builtin_boudoir_")]
         self.assertEqual(len(boudoir), 2)
         for preset in boudoir:
@@ -178,6 +178,25 @@ class CoreTests(unittest.TestCase):
             "mode": "tag",
         }, LEX)
         self.assertIn("光影方向", " ".join(conflict["warnings"]))
+
+    def test_soft_sweet_terms(self):
+        group_ids = {g["id"] for layer in LEX.layers for g in layer["groups"]}
+        self.assertTrue({"shy_expression", "soft_palette", "bright_soft"} <= group_ids)
+        for term in ("sakura pink palette", "rose red accents", "champagne gold details",
+                     "French lace trim", "silk ribbon bow", "pearl chain detail",
+                     "natural shy smile", "bright airy lighting", "pastel color grading"):
+            self.assertIsNotNone(LEX.lookup(term), term)
+            self.assertFalse(LEX.is_blocked(term), term)
+        presets = json.loads((ROOT / "data" / "presets.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(presets), 7)
+        moodboard = next(p for p in presets if p["id"] == "builtin_sakura_moodboard")
+        result = compose({"selections": moodboard["selections"], "mode": moodboard["mode"],
+                          "model": moodboard["model"], "syntax": "plain"}, LEX)
+        self.assertIn("sakura-pink", result["positive"])
+        self.assertNotIn("过滤", " ".join(result["warnings"]))
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("226 条", readme)
+        self.assertIn("7 套", readme)
 
     def test_auth_primitives(self):
         stored = hash_password("Passw0rd!")

@@ -232,5 +232,44 @@
         "fine-art portrait"
       ]
     }
+  },
+  {
+    "id": "builtin_sakura_moodboard",
+    "name": "柔美甜欲 · 樱粉提案板",
+    "builtin": true,
+    "mode": "natural",
+    "model": "flux",
+    "syntax": "plain",
+    "selections": {
+      "identity": [
+        "30-year-old woman",
+        "dark brown hair",
+        "long wavy hair",
+        "natural shy smile",
+        "gentle downward head tilt",
+        "soft blush"
+      ],
+      "attire": [
+        "sakura pink palette",
+        "French lace trim",
+        "silk ribbon bow",
+        "featherlight tulle",
+        "champagne gold details"
+      ],
+      "pose_scene": [
+        "boudoir setting",
+        "leaning into the window light",
+        "half-drawn curtains",
+        "morning stillness"
+      ],
+      "photo": [
+        "bright airy lighting",
+        "85mm f/1.4 portrait lens",
+        "natural skin texture",
+        "pastel color grading",
+        "delicate rim highlight",
+        "editorial boudoir photography"
+      ]
+    }
   }
 ]

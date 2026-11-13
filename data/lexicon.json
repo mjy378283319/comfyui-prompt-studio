@@ -304,6 +304,37 @@
               "a slight tilt of the head"
             ]
           ]
+        },
+        {
+          "id": "shy_expression",
+          "title": "娇羞神态（柔美向）",
+          "items": [
+            [
+              "natural shy smile",
+              "自然娇羞浅笑",
+              "a natural, shy smile"
+            ],
+            [
+              "slightly lowered gaze",
+              "微垂眼眸",
+              "a slightly lowered gaze"
+            ],
+            [
+              "gentle downward head tilt",
+              "微微低头",
+              "a gentle downward tilt of the head"
+            ],
+            [
+              "soft blush",
+              "淡淡红晕",
+              "a soft natural blush"
+            ],
+            [
+              "fingertips resting on fabric",
+              "指尖轻搭布料",
+              "fingertips resting lightly on the fabric"
+            ]
+          ]
         }
       ]
     },
@@ -632,6 +663,62 @@
               "fabric folds catching light",
               "布褶受光",
               "fabric folds catching the light"
+            ]
+          ]
+        },
+        {
+          "id": "soft_palette",
+          "title": "柔美甜欲 · 色彩与材质",
+          "items": [
+            [
+              "sakura pink palette",
+              "樱粉主调",
+              "a soft sakura-pink palette"
+            ],
+            [
+              "rose red accents",
+              "玫瑰红点缀",
+              "delicate rose-red accents"
+            ],
+            [
+              "champagne gold details",
+              "香槟金细节",
+              "subtle champagne-gold detailing"
+            ],
+            [
+              "creamy white base",
+              "奶白打底",
+              "a creamy-white base"
+            ],
+            [
+              "light apricot tones",
+              "浅杏色调",
+              "light apricot tones"
+            ],
+            [
+              "French lace trim",
+              "法式蕾丝花边",
+              "fine French lace trim"
+            ],
+            [
+              "silk ribbon bow",
+              "丝带蝴蝶结",
+              "a silk ribbon bow"
+            ],
+            [
+              "pearl chain detail",
+              "珍珠链细节",
+              "a delicate pearl chain detail"
+            ],
+            [
+              "featherlight tulle",
+              "轻薄纱料",
+              "featherlight tulle layers"
+            ],
+            [
+              "soft knit cardigan",
+              "柔软针织开衫",
+              "a soft knit cardigan"
             ]
           ]
         }
@@ -1210,6 +1297,37 @@
               "editorial boudoir photography",
               "私房编辑摄影",
               "an editorial boudoir photograph"
+            ]
+          ]
+        },
+        {
+          "id": "bright_soft",
+          "title": "明亮柔光（柔美向）",
+          "items": [
+            [
+              "bright airy lighting",
+              "明亮通透光",
+              "bright, airy natural lighting"
+            ],
+            [
+              "soft diffused glow",
+              "柔和漫射光",
+              "a soft, diffused glow"
+            ],
+            [
+              "pastel color grading",
+              "柔粉调色",
+              "gentle pastel color grading"
+            ],
+            [
+              "high-key soft shadows",
+              "高调柔和阴影",
+              "high-key, soft shadows"
+            ],
+            [
+              "delicate rim highlight",
+              "细致轮廓高光",
+              "a delicate rim highlight"
             ]
           ]
         }
