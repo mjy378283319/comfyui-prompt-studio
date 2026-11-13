@@ -23,6 +23,7 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 from auth import Auth, AuthError, is_https  # noqa: E402
+from poses import PoseIndex  # noqa: E402
 from composer import compose  # noqa: E402
 from extract import EngineUnavailable, decode_data_url, extract  # noqa: E402
 from lexicon import Lexicon, LexiconError  # noqa: E402
@@ -73,6 +74,10 @@ ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
+# 可选：挂载 anhao/ai-pose-gallery-zh 仓库（只读）。镜像内不含任何上游数据/图片。
+REFERENCE_DIR = Path(os.environ.get("REFERENCE_DIR") or (ROOT_DIR / "reference"))
+POSE_REFERENCE_ENABLED = _env_bool("POSE_REFERENCE_ENABLED", True)
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 LOG = logging.getLogger("prompt-studio")
 
@@ -94,6 +99,9 @@ AUTH = Auth(
     lockout_minutes=_env_int("LOGIN_LOCKOUT_MINUTES", 5),
 )
 LOG.info("登录保护：%s", "已启用（管理员已创建）" if AUTH.initialized else "待首次在内网创建管理员")
+
+POSES = PoseIndex(REFERENCE_DIR, POSE_REFERENCE_ENABLED)
+LOG.info("姿势参考库：%s", POSES.status()["reason"] or f"已载入 {len(POSES.items)} 个 SFW 姿势")
 
 _PRESET_LOCK = threading.Lock()
 
@@ -292,6 +300,27 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"ok": True, "presets": _builtin_presets() + _user_presets()})
             elif path == "/api/engines":
                 self._json(200, {"ok": True, "engines": _engine_status()})
+            elif path == "/api/poses/status":
+                self._json(200, {"ok": True, **POSES.status()})
+            elif path == "/api/poses":
+                query = urllib.parse.parse_qs(parsed.query)
+                try:
+                    limit = max(1, min(200, int((query.get("limit") or ["60"])[0])))
+                except ValueError:
+                    limit = 60
+                items = POSES.search(
+                    (query.get("q") or [""])[0],
+                    (query.get("category") or [""])[0],
+                    limit,
+                )
+                self._json(200, {"ok": True, "items": items, "status": POSES.status()})
+            elif path == "/api/pose/image":
+                query = urllib.parse.parse_qs(parsed.query)
+                target = POSES.resolve_image((query.get("path") or [""])[0])
+                if target is None:
+                    self._error(404, "图片不存在或不在 SFW 索引内")
+                else:
+                    self._send(200, target.read_bytes(), POSES.content_type(target))
             else:
                 self._error(404, f"未找到路由: {path}")
         except (OSError, ValueError) as exc:

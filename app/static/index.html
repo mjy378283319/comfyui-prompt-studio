@@ -35,6 +35,22 @@
         <button id="deletePresetBtn" class="btn tiny ghost" title="删除选中的自定义预设">删除</button>
       </div>
       <div id="layerPanels" class="layer-panels"></div>
+
+      <details class="layer-card pose-panel" id="posePanel">
+        <summary>
+          <span><span class="l-title">姿势参考库</span><span class="l-sub">可选挂载 · 仅 SFW</span></span>
+          <span class="l-count" id="poseCount"></span>
+        </summary>
+        <div class="layer-body">
+          <div id="poseStatus" class="pose-status"></div>
+          <div class="pose-controls">
+            <input id="poseSearch" type="text" placeholder="搜索中文姿势名 / 分类">
+            <select id="poseCategory"><option value="">全部分类</option></select>
+            <button id="poseRefresh" class="btn tiny">刷新</button>
+          </div>
+          <div id="poseList" class="pose-list"></div>
+        </div>
+      </details>
     </section>
 
     <!-- 中：图生提示词 -->

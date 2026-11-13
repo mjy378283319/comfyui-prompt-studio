@@ -9,6 +9,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DATA_DIR=/app/data \
     MODEL_DIR=/app/models/wd14 \
+    REFERENCE_DIR=/app/reference \
     PORT=8199 \
     COMFYUI_URL=http://127.0.0.1:8188 \
     PUID=99 \
@@ -26,7 +27,7 @@ RUN set -eux; \
     fi; \
     sed -i 's/\r$//' /app/entrypoint.sh; \
     chmod +x /app/entrypoint.sh; \
-    mkdir -p /app/data /app/models/wd14
+    mkdir -p /app/data /app/models/wd14 /app/reference
 
 EXPOSE 8199
 VOLUME ["/app/data", "/app/models/wd14"]

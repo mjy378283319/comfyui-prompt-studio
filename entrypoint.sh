@@ -4,7 +4,8 @@ set -eu
 
 : "${DATA_DIR:=/app/data}"
 : "${MODEL_DIR:=/app/models/wd14}"
-mkdir -p "$DATA_DIR" "$MODEL_DIR"
+: "${REFERENCE_DIR:=/app/reference}"
+mkdir -p "$DATA_DIR" "$MODEL_DIR" "$REFERENCE_DIR" 2>/dev/null || true
 
 for f in lexicon.json guide.md presets.json; do
   if [ ! -f "$DATA_DIR/$f" ] && [ -f "/app/seed/$f" ]; then

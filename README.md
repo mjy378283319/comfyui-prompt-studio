@@ -25,6 +25,7 @@
 - ✅ 四层中英双语词库（226 条），点选即生成；冲突词检测（同组多个光影/镜头/材质会提示）
 - ✅ 私房 / 氛围感摄影词条：薄纱叠搭、斜裁真丝、布料遮蔽关系、纱帘逆光、低调私房光（仅摄影术语）
 - ✅ 柔美甜欲提案板词条：樱粉 / 玫瑰红 / 香槟金 / 奶白 / 浅杏配色，法式蕾丝、丝带蝴蝶结、珍珠链、娇羞神态、明亮柔光
+- ✅ 姿势参考库（可选只读挂载）：中文检索 SFW 姿势、缩略图预览、一键加入 ③ 层、复制参考图路径
 - ✅ Tag 串（CLIP / SDXL / Pony）与自然语言（T5 / Flux / SD3）双模式
 - ✅ 权重语法切换：`(tag:1.2)` / `((tag))` / `{tag}` / `[tag]` / 不加权重；层权重 ①1.25 ②1.15 ③1.05 ④1.0
 - ✅ 图生提示词：PNG 元数据（零依赖）→ WD14 ONNX 本地反推 → 外部视觉接口（按四层归位）
@@ -78,6 +79,7 @@ docker compose -f docker-compose.build.yml build --build-arg WITH_ONNX=1
 | Web UI | 8199 | 8199 | 避开 ComfyUI 的 8188、拓竹耗材管家的 8971 |
 | 数据 | `/app/data` | `/mnt/user/appdata/comfyui-prompt-studio/data` | 用户预设 + `auth.json`（口令哈希与会话）持久化；首次启动自动补齐内置词库/指南，不覆盖已有文件 |
 | 模型 | `/app/models/wd14` | `.../models` | 可选，放 `model.onnx` + `selected_tags.csv` 后启用 WD14 |
+| 姿势库 | `/app/reference` | `.../ai-pose-gallery-zh` | 可选**只读**挂载，镜像内不含任何上游数据与图片 |
 | 属主 | PUID/PGID | 99 / 100 | Unraid 的 `nobody:users` |
 
 ### 环境变量
@@ -102,6 +104,8 @@ docker compose -f docker-compose.build.yml build --build-arg WITH_ONNX=1
 | `ALLOW_PUBLIC_SETUP` | `false` | 是否允许公网来源创建首个管理员 |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | `5` / `5` | 失败锁定阈值与初始锁定时长 |
 | `ALLOWED_ORIGINS` | 空 | 跨站白名单（逗号分隔）；留空 = 严格同源 |
+| `REFERENCE_DIR` | `/app/reference` | 姿势参考库的只读挂载点 |
+| `POSE_REFERENCE_ENABLED` | `true` | 设为 `false` 可完全关闭姿势参考库 |
 | `PUID` / `PGID` | `99` / `100` | Unraid 卷属主 |
 
 > 访问密钥一律走环境变量，不写进代码，也不写进镜像。
@@ -136,6 +140,49 @@ docker compose -f docker-compose.build.yml build --build-arg WITH_ONNX=1
 3. **外部视觉接口（可选）**：配 `REMOTE_VISION_URL`，模型按四层输出 JSON，点「按四层归位」自动回填。
 
 反推结果只当草稿：删冲突词、补 ④ 层的皮肤纹理与镜头，再出图。
+
+---
+
+## 三之二、姿势参考库（可选只读挂载）
+
+工作台可以对接 [`anhao/ai-pose-gallery-zh`](https://github.com/anhao/ai-pose-gallery-zh) 的中文姿势索引。
+**镜像里不含该仓库的任何数据或图片**，由你自己在 NAS 上 clone 并以只读卷挂进来。
+
+> 为什么不打包：上游仓库约 **1.1 GB / 12,022 张图**；其 `LICENSE` 明确 MIT 只覆盖源代码，
+> `img/`、`thumbs/`、`data/` 著作权归原作者（ギア @giaaibusi）且不得商用、禁止打包分发；
+> 仓库还含 18+ 分类。把它们打进我们发布的 GHCR 镜像既不合规，也会毁掉 60 MB 零依赖的设计。
+
+**启用（Unraid）**
+
+```bash
+cd /mnt/user/appdata
+git clone --depth 1 https://github.com/anhao/ai-pose-gallery-zh.git
+# 然后取消 docker-compose.yml 里这一行的注释：
+#   - /mnt/user/appdata/ai-pose-gallery-zh:/app/reference:ro
+docker compose up -d
+```
+
+打开左侧「姿势参考库」面板即可用；未挂载时面板会给出提示，其余功能不受影响。
+
+**过滤规则（硬约束）**
+
+| 项 | 规则 |
+| --- | --- |
+| 体系白名单 | 只索引「全身单人・标准系」「上半身单人」；性感系 / 双人缠绵（18+）一律排除 |
+| 名称过滤 | 含性感 / 缠绵 / 后入 / 挤胸 / 裸露 / 内衣 / 挑逗等词的姿势名排除 |
+| 图片接口 | 只放行索引内登记的 SFW 图片路径，且做目录穿越校验；无法借接口读取其它图片 |
+| 会话 | 与其它 `/api/*` 一样需要登录 |
+
+**界面能做什么**
+
+- 中文关键词 / 分类检索，按「姿势编号」聚合多视角（正面 / 斜侧 / 侧面 / 俯视 / 仰视）。
+- 显示 SFW 缩略图（直接从只读卷读，不经过外网）。
+- 「加入③层」把该姿势对应的英文基础姿势词（如 `standing pose` / `kneeling pose` / `leaning forward`）加进 ③ 动作与场景层，立刻参与合成。
+- 「路径」复制参考图相对路径，可把 `img/` 下的白模或 `img/depth/` 下的深度图丢进 ComfyUI 的 ControlNet（OpenPose / Depth）作为姿势骨架参考；提示词里注明「仅参考姿势，不参考服装 / 发型 / 画风」。
+
+> 若要在 ComfyUI 画布内使用完整 6,162 条可视化选图器，按上游 README 的「模式 A」把仓库 clone 到
+> `ComfyUI/custom_nodes/ai-pose-gallery-zh` 即可；本工作台只负责提示词侧的 SFW 姿势索引对接。
+> 上游图片与数据版权归原作者，仅供个人学习、人体动态研究与合法创作，不得商用或再分发。
 
 ---
 
@@ -186,4 +233,5 @@ PNG 元数据反推（含 ComfyUI workflow 正/负向节点）、登录/初始�
 ## 参考来源
 
 `github.com/WolfChen1996/NovelAI-tag-generator` · `wolfchen.top/tag/doc.html` ·
-`prompt.qpipi.com` · `tags.novelai.dev`（Danbooru 标签超市）· `magic-tag.netlify.app`（魔导绪论）
+`prompt.qpipi.com` · `tags.novelai.dev`（Danbooru 标签超市）· `magic-tag.netlify.app`（魔导绪论） ·
+`github.com/anhao/ai-pose-gallery-zh`（可选只读挂载，仅取 SFW 姿势索引）

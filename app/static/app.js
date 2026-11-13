@@ -13,6 +13,7 @@
     extract: null,
     checked: new Set(),
     composeTimer: null,
+    poses: null,
   };
 
   async function api(path, options = {}) {
@@ -453,6 +454,77 @@
     });
   }
 
+  // ------------------------------------------------------------------ 姿势参考库
+  async function loadPoseStatus() {
+    try {
+      const data = await api("/api/poses/status");
+      state.poses = data;
+      const status = $("poseStatus");
+      status.className = "pose-status" + (data.available ? "" : " off");
+      status.textContent = data.available
+        ? `已载入 ${data.count} 个 SFW 姿势 · ${data.categories.length} 个分类（仅标准系 / 上半身）`
+        : data.reason;
+      $("poseCount").textContent = data.available ? `${data.count} 项` : "未挂载";
+      const select = $("poseCategory");
+      select.textContent = "";
+      const all = el("option", "", "全部分类");
+      all.value = "";
+      select.append(all);
+      (data.categories || []).forEach((name) => {
+        const option = el("option", "", name);
+        option.value = name;
+        select.append(option);
+      });
+      if (data.available) await loadPoses();
+      else $("poseList").textContent = "";
+    } catch (err) {
+      $("poseStatus").textContent = err.message;
+    }
+  }
+
+  async function loadPoses() {
+    if (!state.poses || !state.poses.available) return;
+    const query = $("poseSearch").value.trim();
+    const category = $("poseCategory").value;
+    try {
+      const data = await api(`/api/poses?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}&limit=48`);
+      const list = $("poseList");
+      list.textContent = "";
+      (data.items || []).forEach((item) => list.append(renderPoseCard(item)));
+      if (!data.items.length) list.append(el("div", "pose-status", "没有匹配的姿势"));
+    } catch (err) {
+      $("poseList").textContent = err.message;
+    }
+  }
+
+  function renderPoseCard(item) {
+    const card = el("div", "pose-card");
+    if (item.thumb) {
+      const img = document.createElement("img");
+      img.src = `/api/pose/image?path=${encodeURIComponent(item.thumb)}`;
+      img.alt = item.name;
+      img.loading = "lazy";
+      card.append(img);
+    }
+    card.append(el("div", "pn", item.name));
+    card.append(el("div", "pm", `${item.category} · ${(item.angles || []).join("/") || "单视角"}`));
+    const buttons = el("div", "pb");
+    const add = el("button", "btn tiny primary", "加入③层");
+    add.title = `加入：${item.prompt}`;
+    add.addEventListener("click", () => {
+      if (!state.selections.pose_scene.includes(item.prompt)) state.selections.pose_scene.push(item.prompt);
+      refreshChips();
+      scheduleCompose();
+      toast(`已加入 ③ 层：${item.prompt}`);
+    });
+    const path = el("button", "btn tiny ghost", "路径");
+    path.title = "复制参考图相对路径（供 ComfyUI ControlNet 使用）";
+    path.addEventListener("click", () => copyText(item.full || item.thumb, "参考图路径"));
+    buttons.append(add, path);
+    card.append(buttons);
+    return card;
+  }
+
   // ------------------------------------------------------------------ 事件
   function bind() {
     ["modeSelect", "modelSelect", "syntaxSelect", "qualityChk", "negativeChk",
@@ -539,6 +611,20 @@
       } catch (err) { toast(err.message + (err.hint ? ` — ${err.hint}` : ""), true); }
     });
 
+    let poseTimer = null;
+    $("poseSearch").addEventListener("input", () => {
+      clearTimeout(poseTimer);
+      poseTimer = setTimeout(loadPoses, 250);
+    });
+    $("poseCategory").addEventListener("change", loadPoses);
+    $("poseRefresh").addEventListener("click", async () => {
+      await loadPoseStatus();
+      toast(state.poses && state.poses.available ? "姿势库已刷新" : "姿势库未挂载");
+    });
+    $("posePanel").addEventListener("toggle", () => {
+      if ($("posePanel").open && !state.poses) loadPoseStatus();
+    });
+
     $("logoutBtn").addEventListener("click", async () => {
       try { await api("/api/auth/logout", { method: "POST", body: {} }); } catch (_) { /* 忽略，直接跳登录页 */ }
       window.location.href = "/login";
@@ -569,6 +655,7 @@
       bind();
       applyPreset(presetData.presets.find((p) => p.builtin));
       composeNow();
+      loadPoseStatus();
     } catch (err) {
       $("layerPanels").textContent = `初始化失败：${err.message}`;
       toast(err.message, true);

@@ -40,6 +40,11 @@
       <ContainerDir>/app/models/wd14</ContainerDir>
       <Mode>rw</Mode>
     </Volume>
+    <Volume>
+      <HostDir>/mnt/user/appdata/ai-pose-gallery-zh</HostDir>
+      <ContainerDir>/app/reference</ContainerDir>
+      <Mode>ro</Mode>
+    </Volume>
   </Data>
   <Environment>
     <Variable>
@@ -95,6 +100,16 @@
     <Variable>
       <Name>ALLOW_PUBLIC_SETUP</Name>
       <Value>false</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>REFERENCE_DIR</Name>
+      <Value>/app/reference</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>POSE_REFERENCE_ENABLED</Name>
+      <Value>true</Value>
       <Mode/>
     </Variable>
   </Environment>

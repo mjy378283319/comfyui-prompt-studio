@@ -41,6 +41,10 @@ services:
       LOGIN_LOCKOUT_MINUTES: "5"
       # ALLOWED_ORIGINS: "https://prompt.example.com"  # 需要跨站调用时才填
 
+      # ── 姿势参考库（可选只读挂载）────────────────────────
+      REFERENCE_DIR: /app/reference
+      POSE_REFERENCE_ENABLED: "true"
+
       # 可选：外部视觉接口（OpenAI 兼容 /v1/chat/completions），留空即不启用
       # REMOTE_VISION_URL: "https://your-api.example.com/v1/chat/completions"
       # REMOTE_VISION_KEY: ""
@@ -54,3 +58,5 @@ services:
       - ./data:/app/data
       # 可选：放入 model.onnx + selected_tags.csv 后启用 WD14 本地反推
       - ./models:/app/models/wd14
+      # 可选：自行 clone anhao/ai-pose-gallery-zh 后挂进来（只读，镜像不含任何上游数据/图片）
+      # - /mnt/user/appdata/ai-pose-gallery-zh:/app/reference:ro

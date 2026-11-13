@@ -10,6 +10,8 @@ data/user_presets.json
 user_presets.json
 data/auth.json
 auth.json
+# 可选挂载的上游姿势参考库（版权归原作者，不进仓库/镜像）
+reference/
 
 # WD14 模型文件体积大，由用户自行放入挂载目录
 models/wd14/*.onnx

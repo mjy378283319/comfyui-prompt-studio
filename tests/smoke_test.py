@@ -29,6 +29,7 @@ from auth import (  # noqa: E402
 from composer import compose  # noqa: E402
 from extract import decode_data_url, extract_metadata, split_tags  # noqa: E402
 from lexicon import Lexicon  # noqa: E402
+from poses import PoseIndex, prompt_for  # noqa: E402
 from workflow import build_workflow  # noqa: E402
 
 LEX = Lexicon(ROOT / "data")
@@ -198,6 +199,60 @@ class CoreTests(unittest.TestCase):
         self.assertIn("226 条", readme)
         self.assertIn("7 套", readme)
 
+    def test_pose_index(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "data").mkdir()
+            (root / "thumbs").mkdir()
+            (root / "img").mkdir()
+            rows = [
+                {"id": "std_P001_front", "体系": "全身单人・标准系", "姿势编号": "P001",
+                 "分类": "站姿", "姿势名称": "站立・双手撩发", "角度": "正面",
+                 "缩略图": "thumbs/a.jpg", "原图": "img/a.png"},
+                {"id": "std_P001_side", "体系": "全身单人・标准系", "姿势编号": "P001",
+                 "分类": "站姿", "姿势名称": "站立・双手撩发", "角度": "侧面",
+                 "缩略图": "thumbs/a.jpg", "原图": "img/a.png"},
+                {"id": "upper_P002_front", "体系": "上半身单人", "姿势编号": "P002",
+                 "分类": "托腮", "姿势名称": "手托脸颊・侧望", "角度": "正面",
+                 "缩略图": "thumbs/b.jpg", "原图": "img/b.png"},
+                {"id": "sexy_P001_front", "体系": "全身单人・性感系", "姿势编号": "S001",
+                 "分类": "站姿", "姿势名称": "S形站姿", "角度": "正面",
+                 "缩略图": "thumbs/sexy.jpg", "原图": "img/sexy.png"},
+                {"id": "couple_P001_front", "体系": "双人缠绵", "姿势编号": "C001",
+                 "分类": "拥抱", "姿势名称": "相拥", "角度": "正面",
+                 "缩略图": "thumbs/couple.jpg", "原图": "img/couple.png"},
+                {"id": "std_P003_front", "体系": "全身单人・标准系", "姿势编号": "P003",
+                 "分类": "站姿", "姿势名称": "站立挤胸", "角度": "正面",
+                 "缩略图": "thumbs/bad.jpg", "原图": "img/bad.png"},
+            ]
+            (root / "data" / "pose-zh.json").write_text(
+                json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+            (root / "thumbs" / "a.jpg").write_bytes(b"fake-image")
+            (root / "img" / "sexy.png").write_bytes(b"restricted")
+
+            index = PoseIndex(root)
+            self.assertTrue(index.available)
+            self.assertEqual(len(index.items), 2)  # 18+ 体系、双人缠绵、敏感名称全部排除
+            standing = index.search("双手撩发")[0]
+            self.assertEqual(standing["prompt"], "standing pose")
+            self.assertIn("侧面", standing["angles"])
+            self.assertEqual(index.search(category="托腮")[0]["prompt"], "resting chin on hand pose")
+            self.assertIn("站姿", index.categories)
+            self.assertEqual(len(index.search("双手撩发")), 1)
+            self.assertEqual(len(index.search(category="站姿")), 1)
+            self.assertEqual(index.resolve_image("thumbs/a.jpg").read_bytes(), b"fake-image")
+            self.assertIsNone(index.resolve_image("img/sexy.png"))
+            self.assertIsNone(index.resolve_image("../data/pose-zh.json"))
+            self.assertIsNone(index.resolve_image("thumbs/missing.jpg"))
+            self.assertEqual(prompt_for("跪立", "跪立・双手扶腿"), "kneeling pose")
+
+            disabled = PoseIndex(root, enabled=False)
+            self.assertFalse(disabled.available)
+            self.assertIn("禁用", disabled.status()["reason"])
+            empty = PoseIndex(root / "nowhere")
+            self.assertFalse(empty.available)
+            self.assertIn("未挂载", empty.status()["reason"])
+
     def test_auth_primitives(self):
         stored = hash_password("Passw0rd!")
         self.assertTrue(stored.startswith("pbkdf2_sha256$"))
@@ -258,6 +313,7 @@ class HttpTests(unittest.TestCase):
         if auth_file.exists():
             auth_file.unlink()
         server.AUTH = server.Auth(self.tmp.name, trust_proxy=True, allow_public_setup=False)
+        server.POSES = server.PoseIndex(Path(self.tmp.name) / "reference")
         self.cookie = ""
 
     def raw(self, path, method="GET", body=None, headers=None, follow=True):
@@ -423,6 +479,46 @@ class HttpTests(unittest.TestCase):
         status, data, _ = self.call("/api/workflow", "POST", {"positive": ""})
         self.assertEqual(status, 200)
         self.assertEqual(data["workflow"]["2"]["inputs"]["text"], "")
+
+    def test_pose_endpoints(self):
+        import server
+        ref = Path(self.tmp.name) / "reference"
+        for sub in ("data", "thumbs", "img"):
+            (ref / sub).mkdir(parents=True, exist_ok=True)
+        rows = [
+            {"id": "std_P001_front", "体系": "全身单人・标准系", "姿势编号": "P001",
+             "分类": "站姿", "姿势名称": "站立・双手撩发", "角度": "正面",
+             "缩略图": "thumbs/a.jpg", "原图": "img/a.png"},
+            {"id": "sexy_P001_front", "体系": "全身单人・性感系", "姿势编号": "S001",
+             "分类": "站姿", "姿势名称": "S形站姿", "角度": "正面",
+             "缩略图": "thumbs/sexy.jpg", "原图": "img/sexy.png"},
+        ]
+        (ref / "data" / "pose-zh.json").write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+        (ref / "thumbs" / "a.jpg").write_bytes(b"FAKE")
+        (ref / "img" / "sexy.png").write_bytes(b"RESTRICTED")
+        server.POSES = server.PoseIndex(ref)
+
+        status, _, _ = self.call("/api/poses/status")
+        self.assertEqual(status, 401)  # 姿势库同样受登录保护
+        self.do_setup()
+        status, data, _ = self.call("/api/poses/status")
+        self.assertEqual(status, 200)
+        self.assertTrue(data["available"])
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["systems"], ["上半身单人", "全身单人・标准系"])
+
+        status, data, _ = self.call("/api/poses?q=P001&limit=10")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(data["items"]), 1)
+        self.assertEqual(data["items"][0]["prompt"], "standing pose")
+
+        status, _, body = self.raw("/api/pose/image?path=thumbs%2Fa.jpg")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"FAKE")
+        status, _, _ = self.raw("/api/pose/image?path=img%2Fsexy.png")
+        self.assertEqual(status, 404)  # 18+ 图片不在白名单
+        status, _, _ = self.raw("/api/pose/image?path=..%2Fdata%2Fpose-zh.json")
+        self.assertEqual(status, 404)  # 目录穿越被拒
 
     def test_security(self):
         # 跨站 Origin 直接拒绝，不再有 Access-Control-Allow-Origin: *

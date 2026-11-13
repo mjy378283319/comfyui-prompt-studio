@@ -27,8 +27,11 @@ services:
       LOGIN_LOCKOUT_MINUTES: "5"
       # APP_PASSWORD: "换成你的口令"
       # APP_USERNAME: "admin"
+      REFERENCE_DIR: /app/reference
+      POSE_REFERENCE_ENABLED: "true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data
       - ./models:/app/models/wd14
+      # - /mnt/user/appdata/ai-pose-gallery-zh:/app/reference:ro
