@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.log
+.DS_Store
+.coverage
+
+# 运行期用户数据，不进仓库
+data/user_presets.json
+user_presets.json
+
+# WD14 模型文件体积大，由用户自行放入挂载目录
+models/wd14/*.onnx
+models/wd14/*.csv
+models/wd14/*.json
+models/wd14/*.pt

@@ -1,0 +1,404 @@
+{
+  "version": "1.0.0",
+  "scope": "成年人像摄影提示词 / adult portrait photography only",
+  "note": "全部词条仅用于成年人物的人像摄影创作；不收录未成年、露骨或性化相关标签。",
+  "layers": [
+    {
+      "id": "identity",
+      "title": "① 角色固定层",
+      "subtitle": "年龄 · 发色 · 五官 · 基础身材轮廓",
+      "principle": "先锁定不变量。这一层决定「这是谁」，一旦写好就不要在后续迭代里反复改动，否则每次出图都是另一个人。",
+      "groups": [
+        {
+          "id": "subject",
+          "title": "主体与年龄",
+          "items": [
+            ["adult woman", "成年女性", "an adult woman"],
+            ["28-year-old woman", "28 岁女性", "a 28-year-old woman"],
+            ["35-year-old woman", "35 岁女性", "a 35-year-old woman"],
+            ["42-year-old woman", "42 岁女性", "a 42-year-old woman"],
+            ["adult man", "成年男性", "an adult man"],
+            ["32-year-old man", "32 岁男性", "a 32-year-old man"],
+            ["mature adult", "成熟成年人", "a mature adult"],
+            ["solo portrait", "单人肖像", "a single subject in a solo portrait"]
+          ]
+        },
+        {
+          "id": "hair_color",
+          "title": "发色",
+          "items": [
+            ["black hair", "黑发", "natural black hair"],
+            ["dark brown hair", "深棕发", "dark brown hair"],
+            ["chestnut hair", "栗色发", "chestnut brown hair"],
+            ["platinum blonde hair", "铂金金发", "platinum blonde hair"],
+            ["ash grey hair", "雾灰发", "ash grey hair"],
+            ["auburn hair", "赤褐发", "auburn hair"],
+            ["silver hair", "银发", "silver hair"],
+            ["soft highlights", "柔和挑染", "subtle tonal highlights"],
+            ["natural roots", "自然发根", "visibly natural hair roots"]
+          ]
+        },
+        {
+          "id": "hair_style",
+          "title": "发长与发型",
+          "items": [
+            ["long straight hair", "长直发", "long straight hair"],
+            ["long wavy hair", "长卷发", "long loose waves"],
+            ["shoulder-length hair", "及肩发", "shoulder-length hair"],
+            ["low bun", "低盘发", "a low, loosely pinned bun"],
+            ["messy updo", "随性盘发", "a relaxed updo with loose strands"],
+            ["bob cut", "短波波头", "a clean bob cut"],
+            ["side-parted hair", "侧分发", "side-parted hair"],
+            ["braided hair", "编发", "softly braided hair"],
+            ["tucked behind ear", "发丝别耳后", "hair tucked behind one ear"]
+          ]
+        },
+        {
+          "id": "face",
+          "title": "五官",
+          "items": [
+            ["almond-shaped eyes", "杏眼", "almond-shaped eyes"],
+            ["high cheekbones", "高颧骨", "defined high cheekbones"],
+            ["soft jawline", "柔和下颌线", "a soft jawline"],
+            ["straight nose", "挺直鼻梁", "a straight, refined nose"],
+            ["full lips", "饱满唇形", "naturally full lips"],
+            ["defined brows", "清晰眉形", "defined, natural eyebrows"],
+            ["subtle freckles", "淡雀斑", "faint freckles across the nose"],
+            ["monolid eyes", "单眼皮", "monolid eyes"],
+            ["long lashes", "长睫毛", "long natural lashes"],
+            ["barely-there makeup", "极淡妆容", "barely-there makeup"]
+          ]
+        },
+        {
+          "id": "silhouette",
+          "title": "基础身材轮廓",
+          "items": [
+            ["slender build", "纤细身形", "a slender build"],
+            ["athletic build", "运动型身形", "an athletic build"],
+            ["tall and lean", "高挑清瘦", "a tall, lean silhouette"],
+            ["soft curves", "柔和曲线", "a softly curved silhouette"],
+            ["balanced proportions", "匀称比例", "balanced proportions"],
+            ["broad shoulders", "宽肩", "broad shoulders"],
+            ["relaxed posture", "放松体态", "a relaxed, natural posture"],
+            ["elegant neck line", "修长颈线", "an elegant neck line"]
+          ]
+        },
+        {
+          "id": "expression",
+          "title": "神态",
+          "items": [
+            ["calm gaze", "平静目光", "a calm, steady gaze"],
+            ["faint smile", "浅笑", "a faint, unposed smile"],
+            ["direct eye contact", "直视镜头", "direct eye contact with the camera"],
+            ["looking away", "视线移开", "gazing away from the camera"],
+            ["pensive expression", "若有所思", "a pensive, quiet expression"],
+            ["soft closed eyes", "轻闭双眼", "eyes softly closed"],
+            ["quiet confidence", "沉静自信", "an expression of quiet confidence"],
+            ["slight head tilt", "微侧头", "a slight tilt of the head"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "attire",
+      "title": "② 服饰与遮蔽层",
+      "subtitle": "遮挡状态 · 布料材质 · 层次与色彩",
+      "principle": "先写「遮蔽关系」再写「材质」。遮蔽决定画面的形体与留白，材质决定光怎么落在身上——丝绸反光、亚麻吸光、针织散射，三者不能混着乱写。",
+      "groups": [
+        {
+          "id": "coverage",
+          "title": "遮蔽状态",
+          "items": [
+            ["fully dressed", "完整着装", "fully dressed"],
+            ["layered outfit", "层叠穿搭", "a layered outfit"],
+            ["off-shoulder neckline", "一字领露肩", "an off-shoulder neckline"],
+            ["high-neck silhouette", "高领轮廓", "a high-neck silhouette"],
+            ["draped shawl", "披肩覆肩", "a shawl draped over the shoulders"],
+            ["wrapped in a robe", "长袍包裹", "wrapped in a generous robe"],
+            ["half-tucked shirt", "半扎下摆", "a loosely half-tucked shirt"],
+            ["sleeves rolled up", "挽起袖口", "sleeves rolled to the forearm"],
+            ["loose silhouette", "宽松廓形", "a loose, unrestrictive silhouette"]
+          ]
+        },
+        {
+          "id": "top",
+          "title": "上装 / 主体服装",
+          "items": [
+            ["silk blouse", "真丝衬衫", "a matte silk blouse"],
+            ["linen shirt", "亚麻衬衫", "a crisp linen shirt"],
+            ["cashmere sweater", "羊绒针织衫", "a fine-knit cashmere sweater"],
+            ["tailored blazer", "剪裁西装外套", "a tailored blazer"],
+            ["cotton tank top", "棉质背心", "a soft cotton tank top"],
+            ["velvet robe", "丝绒长袍", "a deep-tone velvet robe"],
+            ["slip dress", "吊带缎面裙", "a bias-cut satin slip dress"],
+            ["wool coat", "羊毛大衣", "an unstructured wool coat"],
+            ["lace-trim camisole", "蕾丝边内搭", "a lace-trimmed camisole"]
+          ]
+        },
+        {
+          "id": "bottom",
+          "title": "下装 / 整体廓形",
+          "items": [
+            ["wide-leg trousers", "阔腿裤", "wide-leg trousers"],
+            ["pleated midi skirt", "百褶中长裙", "a pleated midi skirt"],
+            ["tailored trousers", "西裤", "tailored straight trousers"],
+            ["long wool skirt", "羊毛长裙", "a long wool skirt"],
+            ["straight-leg jeans", "直筒牛仔裤", "straight-leg denim"],
+            ["minimal one-piece outfit", "极简连体装", "a minimal one-piece outfit"]
+          ]
+        },
+        {
+          "id": "fabric",
+          "title": "布料材质",
+          "items": [
+            ["crisp linen", "挺括亚麻", "crisp, breathable linen"],
+            ["washed cotton", "水洗棉", "soft washed cotton"],
+            ["heavy satin", "重磅缎面", "heavy satin with a soft sheen"],
+            ["sheer chiffon", "薄透雪纺", "light, sheer chiffon"],
+            ["fine-knit cashmere", "细针羊绒", "fine-knit cashmere"],
+            ["ribbed wool", "罗纹羊毛", "ribbed wool with visible texture"],
+            ["matte silk", "哑光真丝", "matte silk with a quiet sheen"],
+            ["delicate lace", "细密蕾丝", "delicate lace detailing"],
+            ["raw silk slubs", "真丝竹节纹理", "raw silk with natural slubs"],
+            ["suede texture", "麂皮质感", "a soft suede texture"]
+          ]
+        },
+        {
+          "id": "palette",
+          "title": "色彩与细节",
+          "items": [
+            ["ivory tones", "象牙白调", "a warm ivory palette"],
+            ["charcoal tones", "炭灰色调", "deep charcoal tones"],
+            ["muted sage", "灰绿调", "a muted sage palette"],
+            ["deep burgundy", "酒红调", "deep burgundy accents"],
+            ["tonal monochrome", "同色系单色", "a tonal monochrome palette"],
+            ["subtle embroidery", "细密刺绣", "subtle tonal embroidery"],
+            ["matte metal buttons", "哑光金属扣", "matte metal buttons"],
+            ["natural fabric wrinkles", "自然布褶", "natural, unironed fabric folds"]
+          ]
+        },
+        {
+          "id": "accessories",
+          "title": "配饰",
+          "items": [
+            ["thin gold necklace", "细金项链", "a thin gold necklace"],
+            ["small hoop earrings", "小圈耳环", "small gold hoop earrings"],
+            ["leather wristwatch", "皮质腕表", "a leather-strap wristwatch"],
+            ["minimal rings", "极简戒指", "minimal, understated rings"],
+            ["silk hair ribbon", "真丝发带", "a silk hair ribbon"],
+            ["no accessories", "无配饰", "no visible accessories"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pose_scene",
+      "title": "③ 动作与场景层",
+      "subtitle": "姿态 · 环境 · 时间 · 氛围道具",
+      "principle": "姿态与环境必须互相成立：卧姿配床品、跪姿配地毯或窗台、倚靠配墙面或窗框；环境要给出「光从哪里来」的线索，供下一层承接。",
+      "groups": [
+        {
+          "id": "pose",
+          "title": "姿态",
+          "items": [
+            ["reclining on a bed", "卧姿 · 床上", "reclining on linen bedding"],
+            ["kneeling by the window", "跪姿 · 窗边", "kneeling beside a tall window"],
+            ["leaning against the wall", "倚靠 · 墙面", "leaning against a plaster wall"],
+            ["leaning on a windowsill", "倚靠 · 窗台", "resting an elbow on the windowsill"],
+            ["seated sideways", "侧坐", "seated sideways with knees drawn together"],
+            ["lying on a sofa", "卧姿 · 沙发", "lying across a low sofa"],
+            ["resting chin on hand", "托腮", "resting the chin on one hand"],
+            ["standing with shoulders turned", "回身站立", "standing with shoulders turned toward the light"],
+            ["walking slowly", "缓步", "walking slowly through the frame"]
+          ]
+        },
+        {
+          "id": "scene",
+          "title": "场景",
+          "items": [
+            ["bedroom", "卧室", "a quiet bedroom"],
+            ["linen bedding", "亚麻床品", "rumpled linen bedding"],
+            ["freestanding bathtub", "独立浴缸", "a freestanding bathtub"],
+            ["bathroom with tiles", "瓷砖浴室", "a tiled bathroom"],
+            ["floor-to-ceiling window", "落地窗前", "in front of a floor-to-ceiling window"],
+            ["minimalist studio", "极简影棚", "a minimalist studio"],
+            ["hotel room", "酒店客房", "a restrained hotel room"],
+            ["balcony at dusk", "黄昏阳台", "a balcony at dusk"],
+            ["library corner", "书房一角", "a quiet library corner"],
+            ["sheer curtain area", "纱帘区", "beside layered sheer curtains"]
+          ]
+        },
+        {
+          "id": "time",
+          "title": "时间与天气",
+          "items": [
+            ["golden hour", "黄金时刻", "during golden hour"],
+            ["overcast morning", "阴天清晨", "on an overcast morning"],
+            ["blue hour", "蓝调时刻", "during blue hour"],
+            ["soft rainy daylight", "雨天漫射光", "under soft rainy daylight"],
+            ["midday shade", "正午阴影", "in open midday shade"],
+            ["early morning", "清晨", "in the early morning"],
+            ["warm indoor evening", "室内暖夜", "on a warm indoor evening"]
+          ]
+        },
+        {
+          "id": "props",
+          "title": "氛围道具",
+          "items": [
+            ["sheer curtains", "透光纱帘", "light passing through sheer curtains"],
+            ["soft steam", "轻薄水汽", "a trace of soft steam"],
+            ["fresh flowers", "鲜花", "a few fresh flowers out of focus"],
+            ["warm table lamp", "暖色台灯", "a warm table lamp in the background"],
+            ["open book", "摊开的书", "an open book resting nearby"],
+            ["mirror reflection", "镜面反射", "a soft mirror reflection"],
+            ["ceramic cup", "陶瓷杯", "a handmade ceramic cup"],
+            ["no props", "无道具", "an uncluttered frame with no props"]
+          ]
+        },
+        {
+          "id": "mood",
+          "title": "氛围",
+          "items": [
+            ["quiet intimacy", "安静私密感", "a quiet, intimate atmosphere"],
+            ["editorial calm", "杂志式冷静", "a calm editorial mood"],
+            ["unposed candid", "抓拍感", "an unposed, candid feeling"],
+            ["restrained elegance", "克制优雅", "restrained elegance"],
+            ["soft melancholy", "淡淡忧郁", "a softly melancholic tone"],
+            ["warm stillness", "温暖静谧", "a warm, still atmosphere"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "photo",
+      "title": "④ 摄影与画质层",
+      "subtitle": "光影方向 · 镜头焦段 · 皮肤纹理 · 画质标准",
+      "principle": "这一层是「质感开关」。写实人像翻车九成出在这里：没写光影方向就一片平光，没写镜头就 plasticky 变形，没写皮肤纹理就自动磨皮成塑料人。",
+      "groups": [
+        {
+          "id": "light",
+          "title": "光影方向",
+          "items": [
+            ["soft window light from the left", "左侧窗光", "soft window light falling from the left"],
+            ["backlit rim light", "逆光轮廓光", "backlit with a delicate rim light"],
+            ["diffused overhead light", "顶部漫射光", "diffused overhead light"],
+            ["warm side lighting", "暖色侧光", "warm side lighting"],
+            ["Rembrandt lighting", "伦勃朗光", "classic Rembrandt lighting"],
+            ["gentle fill light", "柔和补光", "a gentle fill light on the shadow side"],
+            ["low-key chiaroscuro", "低调明暗对比", "low-key chiaroscuro"],
+            ["golden hour backlight", "黄金逆光", "golden-hour backlight through the window"],
+            ["soft shadow gradients", "柔和阴影过渡", "soft, gradual shadow gradients"]
+          ]
+        },
+        {
+          "id": "lens",
+          "title": "镜头与构图",
+          "items": [
+            ["85mm f/1.4 portrait lens", "85mm f/1.4", "shot on an 85mm f/1.4 portrait lens"],
+            ["50mm f/1.8", "50mm f/1.8", "shot on a 50mm f/1.8 lens"],
+            ["135mm f/2", "135mm f/2", "shot on a 135mm f/2 telephoto"],
+            ["35mm environmental view", "35mm 环境视角", "a 35mm environmental framing"],
+            ["medium format look", "中画幅质感", "a medium-format rendering"],
+            ["shallow depth of field", "浅景深", "a shallow depth of field"],
+            ["close-up portrait", "特写", "a close-up portrait framing"],
+            ["medium shot", "半身构图", "a medium shot"],
+            ["full-body shot", "全身构图", "a full-body composition"],
+            ["eye-level angle", "平视机位", "an eye-level camera angle"],
+            ["generous negative space", "大面积留白", "generous negative space"]
+          ]
+        },
+        {
+          "id": "skin",
+          "title": "皮肤纹理",
+          "items": [
+            ["natural skin texture", "自然皮肤纹理", "natural, unretouched skin texture"],
+            ["visible pores", "可见毛孔", "finely visible pores"],
+            ["subtle peach fuzz", "细微绒毛", "subtle peach fuzz catching the light"],
+            ["fine skin grain", "细腻颗粒", "fine, realistic skin grain"],
+            ["no over-smoothing", "不过度磨皮", "no over-smoothed skin"],
+            ["realistic subsurface scattering", "真实次表面散射", "realistic subsurface scattering"],
+            ["natural skin tone variation", "自然肤色起伏", "subtle natural tone variation"],
+            ["soft specular highlights", "柔和高光", "soft specular highlights on the skin"]
+          ]
+        },
+        {
+          "id": "rendering",
+          "title": "画质与后期",
+          "items": [
+            ["photorealistic", "照片级写实", "photorealistic rendering"],
+            ["ultra-detailed", "超高细节", "ultra-detailed fine textures"],
+            ["high dynamic range", "高动态范围", "a high dynamic range"],
+            ["fine film grain", "细胶片颗粒", "a fine, organic film grain"],
+            ["sharp focus on eyes", "眼部锐焦", "critical sharpness on the eyes"],
+            ["editorial color grading", "杂志级调色", "restrained editorial color grading"],
+            ["natural color rendition", "自然色彩还原", "natural, faithful color rendition"],
+            ["clean shadow roll-off", "干净暗部过渡", "a clean shadow roll-off"],
+            ["no hdr oversharpening", "避免过锐", "no HDR oversharpening"]
+          ]
+        },
+        {
+          "id": "style",
+          "title": "风格参照",
+          "items": [
+            ["fashion editorial", "时装大片", "a fashion-editorial photograph"],
+            ["fine-art portrait", "艺术人像", "a fine-art portrait"],
+            ["cinematic still", "电影剧照", "a cinematic film still"],
+            ["magazine cover", "杂志封面", "a magazine-cover portrait"],
+            ["documentary portrait", "纪实人像", "a documentary-style portrait"],
+            ["studio portrait", "影棚肖像", "a classic studio portrait"],
+            ["natural light portrait", "自然光人像", "a natural-light portrait"]
+          ]
+        }
+      ]
+    }
+  ],
+  "quality_prefix": [
+    ["masterpiece", "大师作品"],
+    ["best quality", "最好画质"],
+    ["highly detailed", "高度细节"],
+    ["professional photography", "专业摄影"],
+    ["absurdres", "超高分辨率"]
+  ],
+  "negative": {
+    "common": [
+      "lowres", "bad anatomy", "bad hands", "text", "error", "missing fingers",
+      "extra digit", "fewer digits", "cropped", "worst quality", "low quality",
+      "normal quality", "jpeg artifacts", "signature", "watermark", "username",
+      "blurry", "bad feet", "deformed face", "extra limbs", "mutated hands"
+    ],
+    "portrait": [
+      "plastic skin", "over-smoothed skin", "waxy face", "oversaturated",
+      "overexposed", "harsh direct flash", "double pupils", "cross-eyed",
+      "distorted proportions", "unnatural pose", "airbrushed", "3d render", "illustration"
+    ],
+    "safety": [
+      "child", "kid", "teen", "teenager", "minor", "baby", "loli", "shota",
+      "nsfw", "nude", "naked", "explicit", "sexual", "porn"
+    ]
+  },
+  "models": [
+    {"id": "sdxl", "name": "SDXL / SD 1.5（CLIP，吃 tag）", "hint": "逗号分隔的 tag 效果最好，可用 (tag:1.2) 精确加权。", "default_mode": "tag"},
+    {"id": "flux", "name": "Flux / SD3（T5，吃自然语言）", "hint": "完整句子比 tag 堆叠更有效；负面提示词通常留空。", "default_mode": "natural"},
+    {"id": "pony", "name": "Pony / Illustrious（Danbooru tag）", "hint": "依赖 Danbooru 风格 tag，画质前缀必备。", "default_mode": "tag"},
+    {"id": "generic", "name": "通用", "hint": "输出最朴素的逗号分隔串，任意 ComfyUI 工作流都能粘贴。", "default_mode": "tag"}
+  ],
+  "syntax": [
+    {"id": "paren_weight", "name": "ComfyUI (tag:1.2)", "hint": "最精确，ComfyUI 原生支持，推荐"},
+    {"id": "paren", "name": "SD WebUI ((tag))", "hint": "每层括号 ×1.1"},
+    {"id": "brace", "name": "NovelAI {tag}", "hint": "每层花括号 ×1.05"},
+    {"id": "bracket", "name": "[tag] 降权", "hint": "削弱该项，用于次要氛围词"},
+    {"id": "plain", "name": "不加权重", "hint": "最干净，交给四层顺序决定优先级"}
+  ],
+  "blacklist": [
+    "loli", "shota", "child", "kid", "baby", "toddler", "teen", "teenager",
+    "nsfw", "nude", "naked", "pussy", "penis", "sex", "porn", "explicit",
+    "rape", "gore", "lolicon", "shotacon"
+  ],
+  "layer_default_weights": {"identity": 1.25, "attire": 1.15, "pose_scene": 1.05, "photo": 1.0},
+  "natural_templates": {
+    "identity": "A high-quality adult portrait of {body}.",
+    "attire": "Attire and layering: {body}.",
+    "pose_scene": "Pose and setting: {body}.",
+    "photo": "Photography: {body}."
+  }
+}

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Unraid Docker 模板：把本文件放到
+  /boot/config/plugins/dockerMan/templates-user/comfyui-prompt-studio.xml
+  然后在 Docker 页点「添加容器」→ 模板下拉里选 ComfyUI Prompt Studio。
+  COMFYUI_URL 请改成 NAS 上 ComfyUI 的地址；容器内 127.0.0.1 不能指向宿主机。
+-->
+<Container version="2">
+  <Name>comfyui-prompt-studio</Name>
+  <Repository>ghcr.io/mjy378283319/comfyui-prompt-studio:latest</Repository>
+  <Registry>https://ghcr.io</Registry>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/mjy378283319/comfyui-prompt-studio/issues</Support>
+  <Project>https://github.com/mjy378283319/comfyui-prompt-studio</Project>
+  <Overview>ComfyUI 提示词工作台：四层模块化模板（角色固定 / 服饰与遮蔽 / 动作与场景 / 摄影与画质）、图片反推提示词、tag 与自然语言双模式输出，可导出工作流 JSON 或直接推送到 ComfyUI。纯 Python 标准库，镜像极小。</Overview>
+  <Category>Tools:AI Media:</Category>
+  <WebUI>http://[IP]:[PORT:8199]/</WebUI>
+  <ExtraParams>--add-host=host.docker.internal:host-gateway</ExtraParams>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>8199</HostPort>
+        <ContainerPort>8199</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data>
+    <Volume>
+      <HostDir>/mnt/user/appdata/comfyui-prompt-studio/data</HostDir>
+      <ContainerDir>/app/data</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/appdata/comfyui-prompt-studio/models</HostDir>
+      <ContainerDir>/app/models/wd14</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+  </Data>
+  <Environment>
+    <Variable>
+      <Name>PUID</Name>
+      <Value>99</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>PGID</Name>
+      <Value>100</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>PORT</Name>
+      <Value>8199</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>COMFYUI_URL</Name>
+      <Value>http://host.docker.internal:8188</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>WD14_THRESHOLD</Name>
+      <Value>0.35</Value>
+      <Mode/>
+    </Variable>
+  </Environment>
+  <Labels/>
+  <Shell>sh</Shell>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateLink/>
+  <Requires/>
+</Container>

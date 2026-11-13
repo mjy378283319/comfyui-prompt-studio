@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.git/
+.gitignore
+.github/
+tests/
+unraid/
+models/*
+!models/README.md
+data/user_presets.json
+*.log
+.coverage

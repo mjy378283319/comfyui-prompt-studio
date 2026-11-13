@@ -1,0 +1,26 @@
+# 在 NAS 或本机从源码自行构建（无需 GHCR）。
+#   docker compose -f docker-compose.build.yml up -d --build
+# 需要 WD14 本地反推时：把 WITH_ONNX 改成 "1"（会联网装 onnxruntime/numpy/Pillow）。
+services:
+  comfyui-prompt-studio:
+    build:
+      context: .
+      args:
+        WITH_ONNX: "0"
+        PIP_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple"
+    image: comfyui-prompt-studio:local
+    container_name: comfyui-prompt-studio
+    restart: unless-stopped
+    ports:
+      - "8199:8199"
+    environment:
+      PUID: 99
+      PGID: 100
+      PORT: 8199
+      COMFYUI_URL: "http://host.docker.internal:8188"
+      WD14_THRESHOLD: "0.35"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models/wd14

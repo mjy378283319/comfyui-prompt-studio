@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ComfyUI 提示词工作台 · 四层模块化</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">PS</span>
+      <div>
+        <h1>ComfyUI 提示词工作台</h1>
+        <p>四层模块化 · 图生提示词 · 成年人像摄影</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div id="engineBadges" class="badges"></div>
+      <button id="guideBtn" class="btn ghost">📖 编写心法</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左：四层模板 -->
+    <section class="col col-layers">
+      <div class="col-head">
+        <h2>模块化模板</h2>
+        <span class="hint">自上而下 · 越靠前越优先</span>
+      </div>
+      <div class="preset-bar">
+        <select id="presetSelect" aria-label="预设"><option value="">— 载入预设 —</option></select>
+        <button id="savePresetBtn" class="btn tiny" title="把当前四层选择保存为预设">保存</button>
+        <button id="deletePresetBtn" class="btn tiny ghost" title="删除选中的自定义预设">删除</button>
+      </div>
+      <div id="layerPanels" class="layer-panels"></div>
+    </section>
+
+    <!-- 中：图生提示词 -->
+    <section class="col col-extract">
+      <div class="col-head">
+        <h2>图生提示词</h2>
+        <span class="hint">PNG 元数据 / WD14 / 视觉模型</span>
+      </div>
+      <div id="dropZone" class="dropzone">
+        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden>
+        <div class="dz-icon">⬆</div>
+        <p>拖入图片，或 <button class="linkbtn" id="pickBtn">点击选择</button></p>
+        <small>ComfyUI / A1111 / NovelAI 生成的 PNG 可直接读出原始提示词</small>
+        <img id="previewImg" class="preview hidden" alt="预览">
+      </div>
+      <div class="engine-row">
+        <label for="engineSelect">反推引擎</label>
+        <select id="engineSelect">
+          <option value="auto">自动（元数据 → WD14 → 视觉接口）</option>
+          <option value="metadata">仅图片元数据（零依赖）</option>
+          <option value="wd14">WD14 ONNX 本地反推</option>
+          <option value="remote">外部视觉接口（四层归位）</option>
+        </select>
+        <label for="thresholdInput" class="threshold">阈值</label>
+        <input id="thresholdInput" type="number" min="0.05" max="0.95" step="0.05" value="0.35">
+        <button id="extractBtn" class="btn primary">提取</button>
+      </div>
+      <div id="extractStatus" class="status"></div>
+      <div id="extractResult" class="extract-result hidden">
+        <div class="result-head">
+          <strong id="resultEngine">—</strong>
+          <span id="resultCount" class="pill"></span>
+        </div>
+        <div id="resultWarnings" class="warnings"></div>
+        <details class="raw-prompt">
+          <summary>原始提示词 / 元数据</summary>
+          <pre id="resultRaw"></pre>
+        </details>
+        <div class="tag-toolbar">
+          <button id="selectAllTags" class="btn tiny ghost">全选</button>
+          <button id="unselectAllTags" class="btn tiny ghost">清空</button>
+          <button id="applyLayersBtn" class="btn tiny">按四层归位</button>
+          <button id="mergeTagsBtn" class="btn tiny primary">合并勾选词到补充词</button>
+        </div>
+        <div id="tagList" class="tag-list"></div>
+      </div>
+      <div class="tips">
+        <h3>反推结果只当草稿</h3>
+        <p>勾选后按四层重新归位，删掉互相冲突的词，最后补齐 ④ 层的<strong>皮肤纹理 + 镜头焦段</strong>。</p>
+      </div>
+    </section>
+
+    <!-- 右：输出 -->
+    <section class="col col-output">
+      <div class="col-head">
+        <h2>ComfyUI 输出</h2>
+        <span id="statsLabel" class="hint">—</span>
+      </div>
+      <div class="controls">
+        <div class="control-row">
+          <label>模型</label>
+          <select id="modelSelect"></select>
+          <label>模式</label>
+          <select id="modeSelect">
+            <option value="tag">Tag 串（CLIP）</option>
+            <option value="natural">自然语言（T5）</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <label>权重语法</label>
+          <select id="syntaxSelect"></select>
+          <label class="check"><input type="checkbox" id="qualityChk" checked> 画质前缀</label>
+        </div>
+        <div class="control-row">
+          <label class="check"><input type="checkbox" id="negativeChk" checked> 负向提示词</label>
+          <label class="check"><input type="checkbox" id="negCommon" checked> 通用</label>
+          <label class="check"><input type="checkbox" id="negPortrait" checked> 人像</label>
+          <label class="check"><input type="checkbox" id="negSafety" checked> 合规</label>
+        </div>
+        <div class="control-row compact">
+          <input id="extraPositive" type="text" placeholder="补充正向词（逗号分隔）">
+          <input id="extraNegative" type="text" placeholder="补充负向词（逗号分隔）">
+        </div>
+      </div>
+
+      <div class="output-block">
+        <div class="output-head"><strong>正向提示词</strong><button class="btn tiny ghost" data-copy="positive">复制</button></div>
+        <textarea id="positiveOut" spellcheck="false" placeholder="选择左侧词条后自动生成"></textarea>
+      </div>
+      <div class="output-block">
+        <div class="output-head"><strong>负向提示词</strong><button class="btn tiny ghost" data-copy="negative">复制</button></div>
+        <textarea id="negativeOut" spellcheck="false" placeholder=""></textarea>
+      </div>
+
+      <details class="segments" open>
+        <summary>四层分段预览</summary>
+        <div id="segmentsBox"></div>
+      </details>
+      <div id="composeWarnings" class="warnings"></div>
+
+      <div class="export-grid">
+        <button id="copyBothBtn" class="btn primary">复制正 / 负向</button>
+        <button id="downloadTxtBtn" class="btn">下载 .txt</button>
+        <button id="workflowBtn" class="btn">导出工作流 JSON</button>
+        <button id="pushBtn" class="btn">推送到 ComfyUI</button>
+      </div>
+      <div class="workflow-opts">
+        <label>尺寸 <select id="wfSize"><option value="896x1152">896×1152</option><option value="1024x1024">1024×1024</option><option value="768x1280">768×1280</option><option value="1216x832">1216×832</option></select></label>
+        <label>步数 <input id="wfSteps" type="number" value="28" min="1" max="150"></label>
+        <label>CFG <input id="wfCfg" type="number" value="6.5" step="0.5" min="0" max="30"></label>
+        <label>模型文件 <input id="wfCkpt" type="text" placeholder="在 ComfyUI 里改即可"></label>
+      </div>
+      <p class="footnote">导出的是 ComfyUI <code>/prompt</code> API 工作流；导入后把 ① 号节点的 checkpoint 换成你的模型。</p>
+    </section>
+  </main>
+
+  <div id="guideModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head"><h2>高质感人像提示词 · 编写心法</h2><button id="closeGuideBtn" class="btn tiny ghost">关闭</button></div>
+      <article id="guideContent" class="markdown"></article>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+# Unraid / NAS 部署用：直接拉 GHCR 预构建镜像，无需在 NAS 上构建。
+#   docker compose pull && docker compose up -d
+#
+# 建议放置目录：/mnt/user/appdata/comfyui-prompt-studio/
+# 如用绝对路径，把下面 ./data / ./models 换成：
+#   /mnt/user/appdata/comfyui-prompt-studio/data:/app/data
+#   /mnt/user/appdata/comfyui-prompt-studio/models:/app/models/wd14
+services:
+  comfyui-prompt-studio:
+    image: ghcr.io/mjy378283319/comfyui-prompt-studio:latest
+    container_name: comfyui-prompt-studio
+    restart: unless-stopped
+    ports:
+      - "8199:8199"
+    environment:
+      # Unraid 的 nobody:users，保证挂载目录里生成的文件属主正确
+      PUID: 99
+      PGID: 100
+      PORT: 8199
+
+      # ComfyUI 地址：容器内的 127.0.0.1 指向自己，绝不能填 127.0.0.1。
+      # ComfyUI 在同一台 Unraid 上时二选一：
+      #   http://host.docker.internal:8188   （已配 extra_hosts，免填 IP）
+      #   http://192.168.x.x:8188            （填 NAS 的局域网 IP）
+      COMFYUI_URL: "http://host.docker.internal:8188"
+
+      # WD14 反推置信度阈值（仅挂载模型后生效）
+      WD14_THRESHOLD: "0.35"
+
+      # 可选：外部视觉接口（OpenAI 兼容 /v1/chat/completions），留空即不启用
+      # REMOTE_VISION_URL: "https://your-api.example.com/v1/chat/completions"
+      # REMOTE_VISION_KEY: ""
+      # REMOTE_VISION_MODEL: "gpt-4o-mini"
+      # REMOTE_VISION_MODE: "openai"
+      # REMOTE_VISION_TIMEOUT: "45"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # 用户预设持久化；首次启动会自动补齐内置词库/指南/预设，不会覆盖已有文件
+      - ./data:/app/data
+      # 可选：放入 model.onnx + selected_tags.csv 后启用 WD14 本地反推
+      - ./models:/app/models/wd14

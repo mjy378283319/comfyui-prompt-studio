@@ -1,0 +1,58 @@
+[
+  {
+    "id": "builtin_golden_bedroom",
+    "name": "黄金窗光 · 亚麻卧室",
+    "builtin": true,
+    "mode": "tag",
+    "model": "sdxl",
+    "syntax": "paren_weight",
+    "selections": {
+      "identity": ["28-year-old woman", "dark brown hair", "long wavy hair", "high cheekbones", "slender build", "faint smile"],
+      "attire": ["linen shirt", "crisp linen", "ivory tones", "no accessories"],
+      "pose_scene": ["reclining on a bed", "bedroom", "linen bedding", "golden hour", "sheer curtains", "quiet intimacy"],
+      "photo": ["soft window light from the left", "85mm f/1.4 portrait lens", "natural skin texture", "visible pores", "photorealistic", "editorial color grading"]
+    }
+  },
+  {
+    "id": "builtin_bath_morning",
+    "name": "晨光浴室 · 缎面长袍",
+    "builtin": true,
+    "mode": "natural",
+    "model": "flux",
+    "syntax": "plain",
+    "selections": {
+      "identity": ["35-year-old woman", "black hair", "low bun", "almond-shaped eyes", "elegant neck line", "looking away"],
+      "attire": ["wrapped in a robe", "heavy satin", "deep burgundy", "layered outfit"],
+      "pose_scene": ["leaning on a windowsill", "bathroom with tiles", "overcast morning", "soft steam", "editorial calm"],
+      "photo": ["diffused overhead light", "50mm f/1.8", "natural skin texture", "soft specular highlights", "fine film grain", "fine-art portrait"]
+    }
+  },
+  {
+    "id": "builtin_studio_editorial",
+    "name": "影棚编辑部 · 羊绒与侧光",
+    "builtin": true,
+    "mode": "tag",
+    "model": "sdxl",
+    "syntax": "paren_weight",
+    "selections": {
+      "identity": ["adult man", "side-parted hair", "defined brows", "broad shoulders", "direct eye contact"],
+      "attire": ["cashmere sweater", "fine-knit cashmere", "charcoal tones", "tailored blazer", "leather wristwatch"],
+      "pose_scene": ["standing with shoulders turned", "minimalist studio", "midday shade", "no props", "restrained elegance"],
+      "photo": ["Rembrandt lighting", "135mm f/2", "subtle peach fuzz", "no over-smoothing", "ultra-detailed", "fashion editorial"]
+    }
+  },
+  {
+    "id": "builtin_window_dusk",
+    "name": "落地窗黄昏 · 逆光轮廓",
+    "builtin": true,
+    "mode": "natural",
+    "model": "flux",
+    "syntax": "plain",
+    "selections": {
+      "identity": ["42-year-old woman", "ash grey hair", "shoulder-length hair", "soft jawline", "balanced proportions", "pensive expression"],
+      "attire": ["slip dress", "matte silk", "tonal monochrome", "draped shawl"],
+      "pose_scene": ["kneeling by the window", "floor-to-ceiling window", "blue hour", "sheer curtains", "soft melancholy"],
+      "photo": ["backlit rim light", "medium format look", "natural skin tone variation", "clean shadow roll-off", "cinematic still"]
+    }
+  }
+]
