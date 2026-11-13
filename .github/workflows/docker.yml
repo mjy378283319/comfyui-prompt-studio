@@ -26,6 +26,10 @@ jobs:
         run: python tests/smoke_test.py
       - name: 前端 JS 语法检查
         run: node --check app/static/app.js
+      - name: 登录页内联脚本语法检查
+        run: |
+          python -c "import re,pathlib;h=pathlib.Path('app/static/login.html').read_text(encoding='utf-8');pathlib.Path('/tmp/login-inline.js').write_text(re.search(r'<script>([\s\S]*?)</script>',h).group(1),encoding='utf-8')"
+          node --check /tmp/login-inline.js
 
   build:
     name: 构建并推送镜像

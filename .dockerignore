@@ -9,5 +9,6 @@ unraid/
 models/*
 !models/README.md
 data/user_presets.json
+data/auth.json
 *.log
 .coverage

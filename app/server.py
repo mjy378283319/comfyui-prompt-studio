@@ -22,31 +22,56 @@ ROOT_DIR = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+from auth import Auth, AuthError, is_https  # noqa: E402
 from composer import compose  # noqa: E402
 from extract import EngineUnavailable, decode_data_url, extract  # noqa: E402
 from lexicon import Lexicon, LexiconError  # noqa: E402
 from workflow import build_workflow  # noqa: E402
 
-VERSION = "1.0.0"
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    return default if value is None else value.strip().lower() in ("1", "true", "yes", "on")
+
+
+VERSION = "1.1.0"
 STATIC_DIR = APP_DIR / "static"
 DATA_DIR = Path(os.environ.get("DATA_DIR") or (ROOT_DIR / "data"))
 MODEL_DIR = Path(os.environ.get("MODEL_DIR") or (ROOT_DIR / "models" / "wd14"))
 USER_PRESETS = DATA_DIR / "user_presets.json"
 COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
-PORT = int(os.environ.get("PORT", "8199"))
+PORT = _env_int("PORT", 8199)
 MAX_BODY = 32 * 1024 * 1024
 REMOTE_CFG = {
     "url": os.environ.get("REMOTE_VISION_URL", ""),
     "key": os.environ.get("REMOTE_VISION_KEY", ""),
     "model": os.environ.get("REMOTE_VISION_MODEL", "gpt-4o-mini"),
     "mode": os.environ.get("REMOTE_VISION_MODE", "openai"),
-    "timeout": int(os.environ.get("REMOTE_VISION_TIMEOUT", "45")),
+    "timeout": _env_int("REMOTE_VISION_TIMEOUT", 45),
 }
+try:
+    _threshold = float(os.environ.get("WD14_THRESHOLD", "0.35"))
+except ValueError:
+    _threshold = 0.35
 ENGINE_CFG = {
     "model_dir": str(MODEL_DIR),
     "remote": REMOTE_CFG,
-    "threshold": float(os.environ.get("WD14_THRESHOLD", "0.35")),
+    "threshold": _threshold,
 }
+
+# 跨站白名单：默认空 = 完全同源，不再放行任意站点调用 API。
+ALLOWED_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 LOG = logging.getLogger("prompt-studio")
@@ -56,6 +81,19 @@ try:
 except LexiconError as exc:
     LOG.error("词库加载失败: %s", exc)
     raise
+
+AUTH = Auth(
+    DATA_DIR,
+    app_password=os.environ.get("APP_PASSWORD", ""),
+    app_username=os.environ.get("APP_USERNAME", "admin"),
+    session_ttl_days=_env_int("SESSION_TTL_DAYS", 30),
+    trust_proxy=_env_bool("TRUST_PROXY", True),
+    require_https=_env_bool("REQUIRE_HTTPS", False),
+    allow_public_setup=_env_bool("ALLOW_PUBLIC_SETUP", False),
+    max_attempts=_env_int("LOGIN_MAX_ATTEMPTS", 5),
+    lockout_minutes=_env_int("LOGIN_LOCKOUT_MINUTES", 5),
+)
+LOG.info("登录保护：%s", "已启用（管理员已创建）" if AUTH.initialized else "待首次在内网创建管理员")
 
 _PRESET_LOCK = threading.Lock()
 
@@ -132,7 +170,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin")
+        if origin and origin in ALLOWED_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         for key, value in (extra or {}).items():
@@ -141,11 +182,63 @@ class Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def _json(self, status: int, obj: dict) -> None:
-        self._send(status, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+    def _json(self, status: int, obj: dict, extra: dict | None = None) -> None:
+        self._send(status, json.dumps(obj, ensure_ascii=False).encode("utf-8"),
+                   "application/json; charset=utf-8", extra)
 
     def _error(self, status: int, message: str, hint: str = "") -> None:
         self._json(status, {"ok": False, "error": message, "hint": hint})
+
+    @property
+    def peer_ip(self) -> str:
+        return self.client_address[0] if self.client_address else ""
+
+    @property
+    def secure(self) -> bool:
+        return is_https(self.headers, AUTH.trust_proxy)
+
+    def _redirect(self, location: str, status: int = 302) -> None:
+        self._send(status, b"", "text/plain; charset=utf-8", {"Location": location})
+
+    def _enforce_transport(self, parsed) -> bool:
+        """REQUIRE_HTTPS 时把 HTTP 请求 308 到 HTTPS；健康检查例外，避免容器被判不健康。"""
+        if AUTH.require_https and parsed.path != "/api/health" and not self.secure:
+            host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+            target = "https://" + host + parsed.path + (("?" + parsed.query) if parsed.query else "")
+            self._redirect(target, 308)
+            return True
+        return False
+
+    def _check_origin(self) -> bool:
+        """写操作只接受同源或白名单 Origin，挡掉跨站调用。"""
+        if self.command in ("GET", "HEAD", "OPTIONS"):
+            return True
+        origin = self.headers.get("Origin")
+        if not origin:  # 非浏览器客户端（curl / 健康检查）无 Origin
+            return True
+        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+        if origin in (f"http://{host}", f"https://{host}") or origin in ALLOWED_ORIGINS:
+            return True
+        self._error(403, "跨站请求被拒绝")
+        return False
+
+    def _guard(self, path: str) -> bool:
+        if path in ("/api/health", "/login") or path.startswith("/api/auth/"):
+            return True
+        if AUTH.initialized and AUTH.resolve(AUTH.token_from(self.headers)):
+            return True
+        if path.startswith("/api/"):
+            self._json(401, {"ok": False, "error": "未登录或会话已过期", "code": "unauthorized"})
+        else:
+            self._redirect("/login")
+        return False
+
+    def _serve_login(self) -> None:
+        path = STATIC_DIR / "login.html"
+        if not path.is_file():
+            self._error(404, "登录页缺失")
+            return
+        self._send(200, path.read_bytes(), "text/html; charset=utf-8")
 
     def _body(self) -> dict:
         length = int(self.headers.get("Content-Length") or "0")
@@ -172,12 +265,25 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         try:
-            if path in ("/", "/index.html"):
+            if self._enforce_transport(parsed):
+                return
+            if path == "/login":
+                if AUTH.initialized and AUTH.resolve(AUTH.token_from(self.headers)):
+                    self._redirect("/")
+                else:
+                    self._serve_login()
+                return
+            if path == "/api/auth/status":
+                self._json(200, {"ok": True, **AUTH.status(self.peer_ip)})
+                return
+            if not self._guard(path):
+                return
+            if path == "/api/health":
+                self._json(200, {"ok": True, "version": VERSION, "auth": AUTH.status(self.peer_ip)})
+            elif path in ("/", "/index.html"):
                 self._serve_static("index.html")
             elif path.startswith("/static/"):
                 self._serve_static(path[len("/static/"):])
-            elif path == "/api/health":
-                self._json(200, {"ok": True, "version": VERSION, "engines": _engine_status(), "comfyui_url": COMFYUI_URL})
             elif path == "/api/lexicon":
                 self._json(200, {"ok": True, "lexicon": LEX.data})
             elif path == "/api/guide":
@@ -194,11 +300,62 @@ class Handler(BaseHTTPRequestHandler):
             LOG.exception("GET %s 失败", path)
             self._error(500, f"服务器内部错误: {exc}")
 
+    def _handle_auth(self, path: str, payload: dict) -> None:
+        ip = AUTH.client_ip(self.headers, self.peer_ip)
+        ua = self.headers.get("User-Agent", "") or ""
+        token = AUTH.token_from(self.headers)
+        secure = self.secure
+        if path == "/api/auth/status":
+            self._json(200, {"ok": True, **AUTH.status(self.peer_ip)})
+        elif path == "/api/auth/setup":
+            issued = AUTH.setup(
+                str(payload.get("username") or "admin"),
+                str(payload.get("password") or ""),
+                self.peer_ip, ip, ua,
+            )
+            self._json(200, {"ok": True, "message": "管理员已创建"},
+                       {"Set-Cookie": AUTH.cookie(issued, secure, True)})
+        elif path == "/api/auth/login":
+            issued = AUTH.login(
+                str(payload.get("username") or ""),
+                str(payload.get("password") or ""),
+                ip, ua,
+            )
+            self._json(200, {"ok": True, "message": "登录成功"},
+                       {"Set-Cookie": AUTH.cookie(issued, secure, bool(payload.get("remember", True)))})
+        elif path == "/api/auth/logout":
+            if not AUTH.resolve(token):
+                self._json(401, {"ok": False, "error": "未登录", "code": "unauthorized"})
+                return
+            AUTH.logout(token)
+            self._json(200, {"ok": True}, {"Set-Cookie": AUTH.clear_cookie(secure)})
+        elif path == "/api/auth/password":
+            if not AUTH.resolve(token):
+                self._json(401, {"ok": False, "error": "未登录", "code": "unauthorized"})
+                return
+            AUTH.change_password(
+                str(payload.get("old_password") or ""),
+                str(payload.get("new_password") or ""),
+            )
+            self._json(200, {"ok": True, "message": "口令已修改，请重新登录"},
+                       {"Set-Cookie": AUTH.clear_cookie(secure)})
+        else:
+            self._error(404, f"未找到路由: {path}")
+
     def do_POST(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         try:
+            if self._enforce_transport(parsed):
+                return
+            if not self._check_origin():
+                return
             payload = self._body()
+            if path.startswith("/api/auth/"):
+                self._handle_auth(path, payload)
+                return
+            if not self._guard(path):
+                return
             if path == "/api/compose":
                 self._json(200, {"ok": True, **compose(payload, LEX)})
             elif path == "/api/extract":
@@ -256,6 +413,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(404, f"未找到路由: {path}")
         except ValueError as exc:
             self._error(400, str(exc))
+        except AuthError as exc:
+            self._json(400, {"ok": False, "error": str(exc)})
         except EngineUnavailable as exc:
             self._json(422, {"ok": False, "error": "引擎不可用", "hint": str(exc)})
         except Exception as exc:  # noqa: BLE001
@@ -264,19 +423,29 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path != "/api/presets":
-            self._error(404, f"未找到路由: {parsed.path}")
-            return
-        query = urllib.parse.parse_qs(parsed.query)
-        preset_id = (query.get("id") or [""])[0]
-        with _PRESET_LOCK:
-            items = _user_presets()
-            kept = [p for p in items if p.get("id") != preset_id]
-            if len(kept) == len(items):
-                self._error(404, "未找到该用户预设（内置预设不可删除）")
+        try:
+            if self._enforce_transport(parsed):
                 return
-            _save_user_presets(kept)
-        self._json(200, {"ok": True, "deleted": preset_id})
+            if not self._check_origin():
+                return
+            if not self._guard(parsed.path):
+                return
+            if parsed.path != "/api/presets":
+                self._error(404, f"未找到路由: {parsed.path}")
+                return
+            query = urllib.parse.parse_qs(parsed.query)
+            preset_id = (query.get("id") or [""])[0]
+            with _PRESET_LOCK:
+                items = _user_presets()
+                kept = [p for p in items if p.get("id") != preset_id]
+                if len(kept) == len(items):
+                    self._error(404, "未找到该用户预设（内置预设不可删除）")
+                    return
+                _save_user_presets(kept)
+            self._json(200, {"ok": True, "deleted": preset_id})
+        except Exception as exc:  # noqa: BLE001
+            LOG.exception("DELETE %s 失败", parsed.path)
+            self._error(500, f"服务器内部错误: {exc}")
 
     def _serve_static(self, relative: str) -> None:
         target = (STATIC_DIR / relative).resolve()

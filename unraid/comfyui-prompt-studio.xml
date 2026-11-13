@@ -4,6 +4,8 @@
   /boot/config/plugins/dockerMan/templates-user/comfyui-prompt-studio.xml
   然后在 Docker 页点「添加容器」→ 模板下拉里选 ComfyUI Prompt Studio。
   COMFYUI_URL 请改成 NAS 上 ComfyUI 的地址；容器内 127.0.0.1 不能指向宿主机。
+  APP_PASSWORD 留空时，首次在内网直连访问 http://<NAS-IP>:8199/login 自行创建管理员；
+  也可直接填入口令（至少 8 位）跳过首次设置。
 -->
 <Container version="2">
   <Name>comfyui-prompt-studio</Name>
@@ -13,7 +15,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/mjy378283319/comfyui-prompt-studio/issues</Support>
   <Project>https://github.com/mjy378283319/comfyui-prompt-studio</Project>
-  <Overview>ComfyUI 提示词工作台：四层模块化模板（角色固定 / 服饰与遮蔽 / 动作与场景 / 摄影与画质）、图片反推提示词、tag 与自然语言双模式输出，可导出工作流 JSON 或直接推送到 ComfyUI。纯 Python 标准库，镜像极小。</Overview>
+  <Overview>ComfyUI 提示词工作台：四层模块化模板（角色固定 / 服饰与遮蔽 / 动作与场景 / 摄影与画质）、图片反推提示词、tag 与自然语言双模式输出，可导出工作流 JSON 或直接推送到 ComfyUI。内置登录页、会话保护与失败锁定，纯 Python 标准库，镜像极小。首次使用在内网创建管理员，或用 APP_PASSWORD 预设口令。</Overview>
   <Category>Tools:AI Media:</Category>
   <WebUI>http://[IP]:[PORT:8199]/</WebUI>
   <ExtraParams>--add-host=host.docker.internal:host-gateway</ExtraParams>
@@ -63,6 +65,36 @@
     <Variable>
       <Name>WD14_THRESHOLD</Name>
       <Value>0.35</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>APP_USERNAME</Name>
+      <Value>admin</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>APP_PASSWORD</Name>
+      <Value></Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>SESSION_TTL_DAYS</Name>
+      <Value>30</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>TRUST_PROXY</Name>
+      <Value>true</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>REQUIRE_HTTPS</Name>
+      <Value>false</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>ALLOW_PUBLIC_SETUP</Name>
+      <Value>false</Value>
       <Mode/>
     </Variable>
   </Environment>

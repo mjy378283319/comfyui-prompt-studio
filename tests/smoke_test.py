@@ -22,6 +22,10 @@ for path in (ROOT, ROOT / "app"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from auth import (  # noqa: E402
+    Auth, AuthError, hash_password, is_https, is_private_host,
+    password_strength_error, verify_password,
+)
 from composer import compose  # noqa: E402
 from extract import decode_data_url, extract_metadata, split_tags  # noqa: E402
 from lexicon import Lexicon  # noqa: E402
@@ -148,6 +152,41 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_data_url("!!!not-base64!!!")
 
+    def test_auth_primitives(self):
+        stored = hash_password("Passw0rd!")
+        self.assertTrue(stored.startswith("pbkdf2_sha256$"))
+        self.assertNotIn("Passw0rd!", stored)
+        self.assertTrue(verify_password("Passw0rd!", stored))
+        self.assertFalse(verify_password("passw0rd!", stored))
+        self.assertFalse(verify_password("Passw0rd!", "broken"))
+        self.assertIn("8 位", password_strength_error("abc1") or "")
+        self.assertIn("纯数字", password_strength_error("12345678") or "")
+        self.assertIsNone(password_strength_error("Passw0rd!"))
+        self.assertTrue(is_private_host("127.0.0.1"))
+        self.assertTrue(is_private_host("192.168.1.20"))
+        self.assertFalse(is_private_host("8.8.8.8"))
+        self.assertTrue(is_https({"X-Forwarded-Proto": "https"}, True))
+        self.assertFalse(is_https({"X-Forwarded-Proto": "https"}, False))
+
+        with tempfile.TemporaryDirectory() as folder:
+            auth = Auth(folder, trust_proxy=True)
+            with self.assertRaises(AuthError):
+                auth.setup("admin", "Passw0rd!", "8.8.8.8", "8.8.8.8", "test")  # 公网禁止初始化
+            token = auth.setup("admin", "Passw0rd!", "127.0.0.1", "127.0.0.1", "test")
+            self.assertTrue(auth.resolve(token))
+            self.assertIn("HttpOnly", auth.cookie(token, True, True))
+            self.assertIn("Secure", auth.cookie(token, True, True))
+            self.assertNotIn("Secure", auth.cookie(token, False, True))
+            auth.change_password("Passw0rd!", "N3wPassw0rd!")
+            self.assertFalse(auth.resolve(token))  # 改口令后旧会话失效
+            with self.assertRaises(AuthError):
+                auth.login("admin", "Passw0rd!", "127.0.0.1", "test")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
 
 class HttpTests(unittest.TestCase):
     @classmethod
@@ -167,82 +206,205 @@ class HttpTests(unittest.TestCase):
         cls.httpd.server_close()
         cls.tmp.cleanup()
 
-    def call(self, path, method="GET", body=None):
+    def setUp(self):
+        import server
+        auth_file = Path(self.tmp.name) / "auth.json"
+        if auth_file.exists():
+            auth_file.unlink()
+        server.AUTH = server.Auth(self.tmp.name, trust_proxy=True, allow_public_setup=False)
+        self.cookie = ""
+
+    def raw(self, path, method="GET", body=None, headers=None, follow=True):
+        hdrs = {"Content-Type": "application/json"}
+        if self.cookie:
+            hdrs["Cookie"] = self.cookie
+        hdrs.update(headers or {})
         req = urllib.request.Request(
             f"http://127.0.0.1:{self.port}{path}",
             data=json.dumps(body).encode("utf-8") if body is not None else None,
-            headers={"Content-Type": "application/json"}, method=method,
+            headers=hdrs, method=method,
         )
+        opener = urllib.request.build_opener() if follow else urllib.request.build_opener(NoRedirect)
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                return resp.status, json.loads(resp.read().decode("utf-8"))
+            with opener.open(req, timeout=10) as resp:
+                return resp.status, dict(resp.headers), resp.read()
         except urllib.error.HTTPError as exc:
-            return exc.code, json.loads(exc.read().decode("utf-8"))
+            return exc.code, dict(exc.headers), exc.read()
+
+    def call(self, path, method="GET", body=None, headers=None, follow=True):
+        status, hdrs, raw = self.raw(path, method, body, headers, follow)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            data = {"_raw": raw.decode("utf-8", "replace")}
+        return status, data, hdrs
 
     def request_text(self, path):
-        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{path}", timeout=10) as resp:
-            return resp.read().decode("utf-8")
+        status, _, raw = self.raw(path)
+        return status, raw.decode("utf-8", "replace")
+
+    def _capture_cookie(self, hdrs):
+        self.cookie = hdrs.get("Set-Cookie", "").split(";")[0]
+        self.assertTrue(self.cookie.startswith("ps_session="), hdrs.get("Set-Cookie", ""))
+
+    def do_setup(self):
+        status, data, hdrs = self.call("/api/auth/setup", "POST", {
+            "username": "admin", "password": "Passw0rd!",
+        })
+        self.assertEqual(status, 200, data)
+        self._capture_cookie(hdrs)
+
+    def do_login(self, password="Passw0rd!"):
+        status, data, hdrs = self.call("/api/auth/login", "POST", {
+            "username": "admin", "password": password, "remember": True,
+        })
+        self.assertEqual(status, 200, data)
+        self._capture_cookie(hdrs)
+
+    def test_auth_flow(self):
+        status, data, _ = self.call("/api/auth/status")
+        self.assertEqual(status, 200)
+        self.assertTrue(data["need_setup"])
+        self.assertTrue(data["setup_allowed"])
+
+        status, data, _ = self.call("/api/lexicon")
+        self.assertEqual(status, 401)
+        self.assertEqual(data["code"], "unauthorized")
+
+        status, hdrs, _ = self.raw("/", follow=False)
+        self.assertEqual(status, 302)
+        self.assertEqual(hdrs.get("Location"), "/login")
+        status, text = self.request_text("/login")
+        self.assertEqual(status, 200)
+        self.assertIn("初始化管理员", text)
+
+        status, data, _ = self.call("/api/auth/setup", "POST", {"username": "admin", "password": "12345678"})
+        self.assertEqual(status, 400)
+        self.assertIn("纯数字", data["error"])
+
+        self.do_setup()
+        status, data, _ = self.call("/api/lexicon")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(data["lexicon"]["layers"]), 4)
+        status, hdrs, _ = self.raw("/login", follow=False)
+        self.assertEqual(status, 302)
+        self.assertEqual(hdrs.get("Location"), "/")
+
+        status, _, _ = self.call("/api/auth/logout", "POST", {})
+        self.assertEqual(status, 200)
+        status, _, _ = self.call("/api/lexicon")
+        self.assertEqual(status, 401)
+
+        status, data, _ = self.call("/api/auth/login", "POST", {"username": "admin", "password": "wrong"})
+        self.assertEqual(status, 400)
+        self.do_login()
+        status, _, _ = self.call("/api/lexicon")
+        self.assertEqual(status, 200)
+
+        status, data, _ = self.call("/api/auth/password", "POST", {
+            "old_password": "Passw0rd!", "new_password": "N3wPassw0rd!",
+        })
+        self.assertEqual(status, 200, data)
+        status, _, _ = self.call("/api/lexicon")
+        self.assertEqual(status, 401)  # 改口令后旧会话全部作废
+        self.do_login("N3wPassw0rd!")
+        status, _, _ = self.call("/api/lexicon")
+        self.assertEqual(status, 200)
 
     def test_all_endpoints(self):
-        status, health = self.call("/api/health")
+        self.do_setup()
+        status, health, _ = self.call("/api/health")
         self.assertEqual(status, 200)
         self.assertTrue(health["ok"])
-        self.assertIn("metadata", health["engines"])
+        self.assertTrue(health["auth"]["initialized"])
 
-        status, lex = self.call("/api/lexicon")
-        self.assertEqual(status, 200)
-        self.assertEqual(len(lex["lexicon"]["layers"]), 4)
-
-        status, guide = self.call("/api/guide")
+        status, guide, _ = self.call("/api/guide")
         self.assertEqual(status, 200)
         self.assertIn("角色固定层", guide["markdown"])
 
-        status, presets = self.call("/api/presets")
+        status, presets, _ = self.call("/api/presets")
         self.assertEqual(status, 200)
         self.assertGreaterEqual(len(presets["presets"]), 4)
 
-        self.assertIn("ComfyUI 提示词工作台", self.request_text("/"))
-        self.assertIn("layer-card", self.request_text("/static/style.css"))
+        status, engines, _ = self.call("/api/engines")
+        self.assertEqual(status, 200)
+        self.assertIn("metadata", engines["engines"])
 
-        status, composed = self.call("/api/compose", "POST", {"selections": sample_selections()})
+        status, text = self.request_text("/")
+        self.assertEqual(status, 200)
+        self.assertIn("模块化模板", text)
+        status, text = self.request_text("/static/style.css")
+        self.assertEqual(status, 200)
+        self.assertIn("layer-card", text)
+
+        status, composed, _ = self.call("/api/compose", "POST", {"selections": sample_selections()})
         self.assertEqual(status, 200)
         self.assertIn("linen shirt", composed["positive"])
 
-        status, wf = self.call("/api/workflow", "POST", {"positive": "a", "negative": "b"})
+        status, wf, _ = self.call("/api/workflow", "POST", {"positive": "a", "negative": "b"})
         self.assertEqual(status, 200)
         self.assertEqual(wf["workflow"]["2"]["inputs"]["text"], "a")
 
         png = make_png({"parameters": "masterpiece, adult woman, linen shirt\nNegative prompt: lowres"})
         data_url = "data:image/png;base64," + base64.b64encode(png).decode()
-        status, extracted = self.call("/api/extract", "POST", {"image": data_url, "engine": "auto"})
+        status, extracted, _ = self.call("/api/extract", "POST", {"image": data_url, "engine": "auto"})
         self.assertEqual(status, 200)
         self.assertEqual(extracted["engine"], "metadata")
         self.assertGreaterEqual(len(extracted["tags"]), 3)
         self.assertIn("masterpiece", extracted["positive"])
 
-        status, saved = self.call("/api/presets", "POST", {
+        status, saved, _ = self.call("/api/presets", "POST", {
             "name": "自测预设", "selections": sample_selections(), "mode": "tag", "model": "sdxl",
         })
         self.assertEqual(status, 200)
         preset_id = saved["preset"]["id"]
-        _, presets = self.call("/api/presets")
+        _, presets, _ = self.call("/api/presets")
         self.assertTrue(any(p["id"] == preset_id for p in presets["presets"]))
-        status, _ = self.call(f"/api/presets?id={preset_id}", "DELETE")
+        status, _, _ = self.call(f"/api/presets?id={preset_id}", "DELETE")
         self.assertEqual(status, 200)
 
     def test_error_branches(self):
-        status, data = self.call("/api/extract", "POST", {"image": "!!!bad!!!"})
+        self.do_setup()
+        status, data, _ = self.call("/api/extract", "POST", {"image": "!!!bad!!!"})
         self.assertEqual(status, 400)
         self.assertFalse(data["ok"])
-        status, data = self.call("/api/extract", "POST", {"image": "", "engine": "unknown"})
+        status, _, _ = self.call("/api/extract", "POST", {"image": "", "engine": "unknown"})
         self.assertEqual(status, 400)
-        status, data = self.call("/api/presets", "POST", {"name": "  "})
+        status, _, _ = self.call("/api/presets", "POST", {"name": "  "})
         self.assertEqual(status, 400)
-        status, data = self.call("/api/no-such-route")
+        status, _, _ = self.call("/api/no-such-route")
         self.assertEqual(status, 404)
-        status, data = self.call("/api/workflow", "POST", {"positive": ""})
+        status, data, _ = self.call("/api/workflow", "POST", {"positive": ""})
         self.assertEqual(status, 200)
         self.assertEqual(data["workflow"]["2"]["inputs"]["text"], "")
+
+    def test_security(self):
+        # 跨站 Origin 直接拒绝，不再有 Access-Control-Allow-Origin: *
+        status, data, _ = self.call("/api/compose", "POST", {"selections": {}},
+                                    headers={"Origin": "https://evil.example"})
+        self.assertEqual(status, 403)
+        status, hdrs, _ = self.raw("/api/health", headers={"Origin": "https://evil.example"})
+        self.assertEqual(status, 200)
+        self.assertNotIn("Access-Control-Allow-Origin", hdrs)
+
+        # REQUIRE_HTTPS：普通页面 308 跳 https，健康检查例外
+        import server
+        server.AUTH.require_https = True
+        status, hdrs, _ = self.raw("/", follow=False)
+        self.assertEqual(status, 308)
+        self.assertTrue(hdrs.get("Location", "").startswith("https://"))
+        status, _, _ = self.raw("/api/health")
+        self.assertEqual(status, 200)
+        server.AUTH.require_https = False
+
+        # 公网来源不能初始化管理员
+        status, data, _ = self.call("/api/auth/setup", "POST",
+                                    {"username": "admin", "password": "Passw0rd!"},
+                                    headers={"X-Forwarded-For": "8.8.8.8"})
+        self.assertEqual(status, 200)  # TCP 对端仍是本机内网，与拓竹口径一致
+        server.AUTH = server.Auth(self.tmp.name, allow_public_setup=False)
+        self.assertFalse(server.AUTH.setup_allowed("8.8.8.8"))
+        self.assertTrue(server.AUTH.setup_allowed("192.168.1.10"))
 
 
 if __name__ == "__main__":

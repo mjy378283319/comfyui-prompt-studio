@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 · ComfyUI 提示词工作台</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #171f2b; --line: #2a3646; --soft: #1d2734;
+    --text: #e6edf5; --muted: #8d9bad; --accent: #6ee7d5; --accent-2: #8b9dff;
+    --danger: #f08a8a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background:
+      linear-gradient(rgba(139,157,255,.045) 1px, transparent 1px) 0 0 / 28px 28px,
+      linear-gradient(90deg, rgba(139,157,255,.045) 1px, transparent 1px) 0 0 / 28px 28px,
+      radial-gradient(1200px 600px at 50% -10%, #16243a 0%, var(--bg) 70%);
+    color: var(--text); display: grid; place-items: center; padding: 24px;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { width: min(420px, 100%); }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 30px 30px 26px; box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+  .logo {
+    width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #08121a; font-weight: 800; letter-spacing: .5px; font-size: 15px;
+  }
+  .brand strong { display: block; font-size: 14px; letter-spacing: .3px; }
+  .brand small { display: block; color: var(--muted); font-size: 11px; }
+  h1 { margin: 0 0 4px; font-size: 20px; }
+  .sub { margin: 0 0 22px; color: var(--muted); font-size: 12.5px; }
+  label { display: block; color: var(--muted); font-size: 12px; margin: 14px 0 6px; }
+  input[type=text], input[type=password] {
+    width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 13px; color: var(--text); outline: none; transition: .15s;
+  }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(110,231,213,.1); }
+  input::placeholder { color: #5f6d7e; }
+  .check { display: flex; align-items: center; gap: 7px; margin: 16px 0 0; cursor: pointer; color: var(--muted); }
+  .check input { accent-color: var(--accent); }
+  .error {
+    margin-top: 14px; padding: 8px 10px; border-radius: 7px; font-size: 12px;
+    color: var(--danger); background: rgba(240,138,138,.09); border-left: 2px solid var(--danger);
+  }
+  button {
+    width: 100%; margin-top: 20px; padding: 11px; border: 0; border-radius: 8px;
+    background: linear-gradient(135deg, #37b9a6, #2c8f82); color: #fff;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: .15s;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .hint { margin: 14px 0 0; color: var(--muted); font-size: 11.5px; text-align: center; line-height: 1.6; }
+  .foot { margin: 20px 0 0; text-align: center; color: #6f7d8e; font-size: 11.5px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="brand">
+        <span class="logo">PS</span>
+        <div><strong>ComfyUI 提示词工作台</strong><small>Prompt Studio</small></div>
+      </div>
+      <h1 id="title">登录</h1>
+      <p id="subtitle" class="sub">请输入账号和密码</p>
+      <form id="form" autocomplete="on">
+        <label for="username">账号</label>
+        <input id="username" type="text" autocomplete="username" value="admin" required>
+        <label for="password">密码</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+        <div id="confirmRow" class="hidden">
+          <label for="confirm">确认密码</label>
+          <input id="confirm" type="password" autocomplete="new-password" placeholder="再输入一次">
+        </div>
+        <label id="rememberRow" class="check"><input id="remember" type="checkbox" checked> 保持登录状态</label>
+        <div id="error" class="error hidden"></div>
+        <button id="submit" type="submit">登录</button>
+      </form>
+      <p id="hint" class="hint hidden">口令至少 8 位，不要只用纯数字或纯字母。创建后此初始化入口会自动关闭。</p>
+      <p id="publicHint" class="hint hidden">当前来源不是内网直连，已禁止首次创建管理员。请在内网访问，或用 APP_PASSWORD 环境变量预设口令。</p>
+    </div>
+    <p class="foot">数据完全保存在你自己的服务器上</p>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  let needSetup = false;
+
+  function showError(message) {
+    const box = $("error");
+    box.textContent = message || "操作失败，请重试";
+    box.classList.remove("hidden");
+  }
+
+  async function loadStatus() {
+    try {
+      const resp = await fetch("/api/auth/status", { credentials: "same-origin" });
+      const data = await resp.json();
+      needSetup = !data.initialized;
+      $("username").value = data.username || "admin";
+      if (!needSetup) return;
+      $("title").textContent = "初始化管理员";
+      $("subtitle").textContent = "第一次使用，请创建管理员账号";
+      $("confirmRow").classList.remove("hidden");
+      $("rememberRow").classList.add("hidden");
+      $("hint").classList.remove("hidden");
+      $("submit").textContent = "创建并进入";
+      $("password").autocomplete = "new-password";
+      if (!data.setup_allowed) {
+        $("publicHint").classList.remove("hidden");
+        $("submit").disabled = true;
+      }
+    } catch (err) {
+      showError("无法连接服务，请确认容器已启动");
+      $("submit").disabled = true;
+    }
+  }
+
+  $("form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    $("error").classList.add("hidden");
+    const password = $("password").value;
+    if (needSetup && password !== $("confirm").value) {
+      showError("两次输入的口令不一致");
+      return;
+    }
+    const body = {
+      username: $("username").value.trim() || "admin",
+      password,
+      remember: $("remember").checked,
+    };
+    $("submit").disabled = true;
+    try {
+      const resp = await fetch(needSetup ? "/api/auth/setup" : "/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.ok === false) {
+        showError(data.error || "操作失败，请重试");
+        $("submit").disabled = false;
+        return;
+      }
+      window.location.href = "/";
+    } catch (err) {
+      showError("网络异常，请重试");
+      $("submit").disabled = false;
+    }
+  });
+
+  loadStatus();
+})();
+</script>
+</body>
+</html>

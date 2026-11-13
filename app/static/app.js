@@ -23,6 +23,10 @@
     });
     let data;
     try { data = await resp.json(); } catch { throw new Error(`服务返回异常 (HTTP ${resp.status})`); }
+    if (resp.status === 401) {
+      window.location.href = "/login";
+      throw new Error("登录已过期，正在跳转登录页");
+    }
     if (!resp.ok || data.ok === false) {
       const err = new Error(data.error || `请求失败 (HTTP ${resp.status})`);
       err.hint = data.hint || "";
@@ -535,6 +539,10 @@
       } catch (err) { toast(err.message + (err.hint ? ` — ${err.hint}` : ""), true); }
     });
 
+    $("logoutBtn").addEventListener("click", async () => {
+      try { await api("/api/auth/logout", { method: "POST", body: {} }); } catch (_) { /* 忽略，直接跳登录页 */ }
+      window.location.href = "/login";
+    });
     $("guideBtn").addEventListener("click", async () => {
       try {
         const data = await api("/api/guide");

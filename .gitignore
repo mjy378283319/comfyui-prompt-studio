@@ -5,9 +5,11 @@ __pycache__/
 .DS_Store
 .coverage
 
-# 运行期用户数据，不进仓库
+# 运行期用户数据（含口令哈希与会话），不进仓库
 data/user_presets.json
 user_presets.json
+data/auth.json
+auth.json
 
 # WD14 模型文件体积大，由用户自行放入挂载目录
 models/wd14/*.onnx

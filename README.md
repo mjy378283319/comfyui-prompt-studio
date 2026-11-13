@@ -29,6 +29,7 @@
 - ✅ 正/负向提示词、四层分段预览、冲突与合规警告
 - ✅ 导出 `.txt`、ComfyUI 工作流 JSON、一键推送到 ComfyUI `/prompt`
 - ✅ 预设保存/载入（持久化到挂载卷），内置 4 套成年人像模板
+- ✅ 登录界面与访问控制：首次内网创建管理员、会话 Cookie、失败锁定、反代 HTTPS、CORS/CSRF 防护
 - ✅ 合规底线：词库与反推结果过滤未成年/露骨标签，默认负向词含排除项
 
 ---
@@ -52,7 +53,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-浏览器打开 `http://<NAS-IP>:8199`。
+浏览器打开 `http://<NAS-IP>:8199`，首次访问会跳到 `/login` 让你创建管理员账号（详见下方「登录与安全」）。
 
 ### 方式 B：Unraid WebUI「添加容器」
 
@@ -73,7 +74,7 @@ docker compose -f docker-compose.build.yml build --build-arg WITH_ONNX=1
 | 项 | 容器 | 宿主机（Unraid） | 说明 |
 | --- | --- | --- | --- |
 | Web UI | 8199 | 8199 | 避开 ComfyUI 的 8188、拓竹耗材管家的 8971 |
-| 数据 | `/app/data` | `/mnt/user/appdata/comfyui-prompt-studio/data` | 用户预设持久化；首次启动自动补齐内置词库/指南，不覆盖已有文件 |
+| 数据 | `/app/data` | `/mnt/user/appdata/comfyui-prompt-studio/data` | 用户预设 + `auth.json`（口令哈希与会话）持久化；首次启动自动补齐内置词库/指南，不覆盖已有文件 |
 | 模型 | `/app/models/wd14` | `.../models` | 可选，放 `model.onnx` + `selected_tags.csv` 后启用 WD14 |
 | 属主 | PUID/PGID | 99 / 100 | Unraid 的 `nobody:users` |
 
@@ -91,9 +92,36 @@ docker compose -f docker-compose.build.yml build --build-arg WITH_ONNX=1
 | `REMOTE_VISION_MODEL` | `gpt-4o-mini` | 视觉模型名 |
 | `REMOTE_VISION_MODE` | `openai` | `openai`（四层 JSON）或 `raw`（自定义反推服务） |
 | `REMOTE_VISION_TIMEOUT` | `45` | 超时秒数 |
+| `APP_PASSWORD` | 空 | 预设管理员口令，设置后跳过首次设置页；至少 8 位、不要纯数字/纯字母 |
+| `APP_USERNAME` | `admin` | 管理员账号名 |
+| `SESSION_TTL_DAYS` | `30` | 会话有效期（天），访问时滑动续期 |
+| `TRUST_PROXY` | `true` | 反代后读取 `X-Forwarded-*`（用于判定 HTTPS 与来源 IP） |
+| `REQUIRE_HTTPS` | `false` | 为 `true` 时把 http 请求 308 跳到 https（`/api/health` 例外） |
+| `ALLOW_PUBLIC_SETUP` | `false` | 是否允许公网来源创建首个管理员 |
+| `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | `5` / `5` | 失败锁定阈值与初始锁定时长 |
+| `ALLOWED_ORIGINS` | 空 | 跨站白名单（逗号分隔）；留空 = 严格同源 |
 | `PUID` / `PGID` | `99` / `100` | Unraid 卷属主 |
 
 > 访问密钥一律走环境变量，不写进代码，也不写进镜像。
+
+### 登录与安全（与拓竹耗材管家同一套口径）
+
+首次启动后打开 `http://<NAS-IP>:8199` 会跳转到 `/login`：
+
+- **首次使用**：显示「初始化管理员」，填账号（默认 `admin`）与口令 → 创建后自动登录。
+  **仅允许内网 / 回环 TCP 直连创建**（看对端地址，不看 `X-Forwarded-For`），避免挂上公网被抢先注册；
+  公网部署请先在 compose 里设 `APP_PASSWORD`，或临时把 `ALLOW_PUBLIC_SETUP` 设为 `true`。
+- **之后**：账号 + 口令登录，可勾「保持登录状态」；主界面右上角「退出」可注销。
+- 口令用 **PBKDF2-HMAC-SHA256 加盐哈希**存 `data/auth.json`，比对走 `hmac.compare_digest`；
+  磁盘只存会话令牌的 SHA-256 摘要，改口令后所有旧会话立即失效。
+- Cookie 为 `HttpOnly` + `SameSite=Lax`，反代 HTTPS 下自动加 `Secure`；
+  连续 5 次失败按 IP 锁定，锁定时间递增（上限 1 小时）。
+- 所有 `/api/*` 与页面均需会话（`/api/health` 例外，供容器健康检查）；
+  CORS 默认严格同源，写操作额外校验 `Origin`，避免第三方网页跨站调用。
+- 挂 Lucky / Nginx 反代时保持 `TRUST_PROXY=true`；公网建议 `REQUIRE_HTTPS=true`。
+
+> 忘记口令：删除挂载卷里的 `data/auth.json` 并重启容器，即可重新走首次设置。
+> 口令哈希与会话文件已在 `.gitignore` / `.dockerignore` 中排除，不会进仓库或镜像。
 
 ---
 
@@ -126,8 +154,8 @@ docker compose -f docker-compose.build.yml build --build-arg WITH_ONNX=1
 自动跑自测 → 构建 → 推到 `ghcr.io/${{ github.repository }}`。
 **NAS 上不需要任何 git 密钥**，`docker compose pull` 即可取到镜像。
 
-> 若仓库是 private，GHCR 包默认也是 private，Unraid 首次拉取需先
-> `docker login ghcr.io -u <用户名> -p <PAT>`；把仓库改为 public，镜像即可免登录拉取。
+> 仓库当前为 public，GHCR 镜像已验证可匿名拉取，Unraid 无需 `docker login`。
+> 若把仓库改成 private，包默认也会变 private，需先 `docker login ghcr.io -u <用户名> -p <PAT>`。
 
 ---
 
@@ -140,7 +168,8 @@ node --check app/static/app.js    # 前端语法检查
 ```
 
 自测覆盖：词库加载、四层合成（tag / 自然语言 / 权重 / 合规过滤）、工作流生成、
-PNG 元数据反推（含 ComfyUI workflow 正/负向节点）、全部 HTTP 接口与错误分支。
+PNG 元数据反推（含 ComfyUI workflow 正/负向节点）、登录/初始化/会话/越权/登出/改口令/Origin 校验、
+全部 HTTP 接口与错误分支。
 
 ---
 
@@ -150,7 +179,7 @@ PNG 元数据反推（含 ComfyUI workflow 正/负向节点）、全部 HTTP 接
 - WD14 推理依赖需 `--build-arg WITH_ONNX=1` 额外安装，默认镜像不含模型与推理库。
 - 导出的工作流是 SD 系通用 `KSampler` 模板；Flux 等需换成对应节点，提示词本身可直接复用。
 - ComfyUI 推送只负责提交 `/prompt`，不查询执行结果。
-- 无用户体系与鉴权，建议只在内网 / 反代后面使用。
+- 有登录与会话保护，但仍是**单账号**、无多用户/权限分级；公网暴露建议再叠加反代 Basic Auth 或统一认证。
 
 ## 参考来源
 

@@ -27,6 +27,20 @@ services:
       # WD14 反推置信度阈值（仅挂载模型后生效）
       WD14_THRESHOLD: "0.35"
 
+      # ── 登录与访问控制（与拓竹耗材管家同一套口径）──────────
+      # 留空时：首次在内网直连打开 http://<NAS-IP>:8199/login 自行创建管理员。
+      # 想跳过首次设置（Unraid 模板化部署）就取消注释并换成自己的口令，
+      # 至少 8 位、不要纯数字或纯字母；口令哈希存在 ./data/auth.json。
+      # APP_PASSWORD: "换成你的口令"
+      # APP_USERNAME: "admin"
+      SESSION_TTL_DAYS: "30"        # 会话有效期（天），每次访问滑动续期
+      TRUST_PROXY: "true"           # 挂在 Lucky / Nginx 反代后，读取 X-Forwarded-*
+      REQUIRE_HTTPS: "false"        # 公网部署建议 true：http 请求强制 308 跳 https
+      ALLOW_PUBLIC_SETUP: "false"   # 禁止公网来源抢先创建管理员
+      LOGIN_MAX_ATTEMPTS: "5"       # 连续失败锁定阈值
+      LOGIN_LOCKOUT_MINUTES: "5"
+      # ALLOWED_ORIGINS: "https://prompt.example.com"  # 需要跨站调用时才填
+
       # 可选：外部视觉接口（OpenAI 兼容 /v1/chat/completions），留空即不启用
       # REMOTE_VISION_URL: "https://your-api.example.com/v1/chat/completions"
       # REMOTE_VISION_KEY: ""
