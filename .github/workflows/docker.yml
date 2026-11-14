@@ -24,8 +24,12 @@ jobs:
           python-version: "3.12"
       - name: 后端零依赖冒烟测试
         run: python tests/smoke_test.py
+      - name: 出图归档 / Z-Image 端到端测试
+        run: python tests/test_gallery.py
+      - name: AI 角色合成台端到端测试
+        run: python tests/test_studio.py
       - name: 前端 JS 语法检查
-        run: node --check app/static/app.js
+        run: node --check app/static/app.js && node --check app/static/studio.js
       - name: 登录页内联脚本语法检查
         run: |
           python -c "import re,pathlib;h=pathlib.Path('app/static/login.html').read_text(encoding='utf-8');pathlib.Path('/tmp/login-inline.js').write_text(re.search(r'<script>([\s\S]*?)</script>',h).group(1),encoding='utf-8')"

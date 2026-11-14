@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import mimetypes
@@ -24,10 +25,15 @@ if str(APP_DIR) not in sys.path:
 
 from auth import Auth, AuthError, is_https, is_private_host  # noqa: E402
 from poses import PoseIndex  # noqa: E402
+from studio import ComfyClient, StudioLibrary  # noqa: E402
 from composer import compose  # noqa: E402
 from extract import EngineUnavailable, decode_data_url, extract  # noqa: E402
+from gallery import Gallery  # noqa: E402
 from lexicon import Lexicon, LexiconError  # noqa: E402
-from workflow import build_workflow  # noqa: E402
+from workflow import (  # noqa: E402
+    WORKFLOW_ENGINES, build_for_engine, build_workflow,
+    engine_defaults, is_zimage_workflow,
+)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -37,17 +43,52 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     return default if value is None else value.strip().lower() in ("1", "true", "yes", "on")
 
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 STATIC_DIR = APP_DIR / "static"
 DATA_DIR = Path(os.environ.get("DATA_DIR") or (ROOT_DIR / "data"))
 MODEL_DIR = Path(os.environ.get("MODEL_DIR") or (ROOT_DIR / "models" / "wd14"))
 USER_PRESETS = DATA_DIR / "user_presets.json"
-COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+
+# COMFYUI_URL 允许内嵌凭据 http://user:pass@host:port（ComfyUI 开 --auth 时必需）。
+# 凭据只用于生成 Authorization 头，绝不会出现在日志或 API 响应里。
+_c = urllib.parse.urlsplit(os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/"))
+_netloc = _c.hostname or "127.0.0.1"
+if ":" in _netloc and not _netloc.startswith("["):  # IPv6
+    _netloc = f"[{_netloc}]"
+if _c.port:
+    _netloc += f":{_c.port}"
+COMFYUI_URL = urllib.parse.urlunsplit((_c.scheme or "http", _netloc, _c.path.rstrip("/"), "", ""))
+_COMFY_AUTH = ""
+if _c.username is not None:
+    _cred = _c.username + ((":" + _c.password) if _c.password else "")
+    _COMFY_AUTH = "Basic " + base64.b64encode(urllib.parse.unquote(_cred).encode()).decode()
+
+
+def _comfy_headers(extra: dict | None = None) -> dict:
+    """所有到 ComfyUI 的请求（/prompt、/history、/view）统一带鉴权头。"""
+    headers = dict(extra or {})
+    if _COMFY_AUTH:
+        headers["Authorization"] = _COMFY_AUTH
+    return headers
+
+
+# 出图引擎：sd（原行为，默认） / zimage-gguf（8188） / zimage-int8（8189，推荐）
+WORKFLOW_ENGINE = os.environ.get("WORKFLOW_ENGINE", "sd").strip().lower()
+if WORKFLOW_ENGINE not in WORKFLOW_ENGINES:
+    WORKFLOW_ENGINE = "sd"
+
 PORT = _env_int("PORT", 8199)
 MAX_BODY = 32 * 1024 * 1024
 REMOTE_CFG = {
@@ -78,6 +119,7 @@ ALLOWED_ORIGINS = [
 REFERENCE_DIR = Path(os.environ.get("REFERENCE_DIR") or (ROOT_DIR / "reference"))
 POSE_REFERENCE_ENABLED = _env_bool("POSE_REFERENCE_ENABLED", True)
 POSE_ADULT_MODE = _env_bool("POSE_ADULT_MODE", False)
+DEFAULT_VIEW = "workbench" if os.environ.get("DEFAULT_VIEW", "studio").strip().lower() == "workbench" else "studio"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 LOG = logging.getLogger("prompt-studio")
@@ -102,9 +144,27 @@ AUTH = Auth(
 LOG.info("登录保护：%s", "已启用（管理员已创建）" if AUTH.initialized else "待首次在内网创建管理员")
 
 POSES = PoseIndex(REFERENCE_DIR, POSE_REFERENCE_ENABLED, POSE_ADULT_MODE)
-LOG.info("姿势参考库：%s", POSES.status()["reason"] or f"已载入 {len(POSES.items)} 个 SFW 姿势")
+STUDIO = StudioLibrary(POSES)
+COMFY = ComfyClient(COMFYUI_URL, headers_fn=_comfy_headers)
+LOG.info("姿势参考库：%s", POSES.status()["reason"] or f"已载入 {len(POSES.items)} 个姿势")
+LOG.info("AI 合成台：三库 %s | ComfyUI=%s | 默认视图=%s",
+         STUDIO.visible_counts(), COMFYUI_URL, DEFAULT_VIEW)
 
 _PRESET_LOCK = threading.Lock()
+
+# 出图自动归档：图片落在 DATA_DIR/gallery（已持久化卷），B 房关机后仍可查看
+GALLERY = Gallery(
+    DATA_DIR,
+    COMFYUI_URL,
+    _comfy_headers,
+    enabled=_env_bool("GALLERY_ENABLED", True),
+    poll_interval=_env_float("GALLERY_POLL_INTERVAL", 8.0),
+    history_limit=_env_int("GALLERY_HISTORY_LIMIT", 64),
+    timeout=_env_float("GALLERY_TIMEOUT", 15.0),
+    max_image_bytes=_env_int("GALLERY_MAX_IMAGE_MB", 20) * 1024 * 1024,
+    max_items=_env_int("GALLERY_MAX_ITEMS", 0),
+    init_mode=os.environ.get("GALLERY_INIT_MODE", "from_now"),
+)
 
 
 # --------------------------------------------------------------------------- 工具
@@ -288,7 +348,16 @@ class Handler(BaseHTTPRequestHandler):
             if not self._guard(path):
                 return
             if path == "/api/health":
-                self._json(200, {"ok": True, "version": VERSION, "auth": AUTH.status(self.peer_ip)})
+                # engines 是前端 boot() 用来画反推引擎徽章的，之前漏了会抛异常
+                self._json(200, {
+                    "ok": True,
+                    "version": VERSION,
+                    "auth": AUTH.status(self.peer_ip),
+                    "engines": _engine_status(),
+                    "workflow_engine": WORKFLOW_ENGINE,
+                    "workflow_defaults": engine_defaults(WORKFLOW_ENGINE),
+                    "gallery": {"enabled": GALLERY.enabled, "online": GALLERY.status()["online"]},
+                })
             elif path in ("/", "/index.html"):
                 self._serve_static("index.html")
             elif path.startswith("/static/"):
@@ -322,6 +391,64 @@ class Handler(BaseHTTPRequestHandler):
                     self._error(404, "图片不存在或不在 SFW 索引内")
                 else:
                     self._send(200, target.read_bytes(), POSES.content_type(target))
+            elif path == "/api/gallery":
+                query = urllib.parse.parse_qs(parsed.query)
+                try:
+                    limit = max(1, min(200, int((query.get("limit") or ["60"])[0])))
+                    offset = max(0, int((query.get("offset") or ["0"])[0]))
+                except ValueError:
+                    limit, offset = 60, 0
+                self._json(200, GALLERY.list_records(
+                    (query.get("q") or [""])[0], limit, offset
+                ))
+            elif path == "/api/gallery/image":
+                query = urllib.parse.parse_qs(parsed.query)
+                target = GALLERY.resolve_image((query.get("file") or [""])[0])
+                if target is None:
+                    self._error(404, "图片不存在或不在归档索引内")
+                else:
+                    self._send(200, target.read_bytes(), Gallery.content_type(target))
+            elif path == "/api/studio/library":
+                self._json(200, {"ok": True, **STUDIO.status()})
+            elif path == "/api/studio/pick":
+                query = urllib.parse.parse_qs(parsed.query)
+                item = STUDIO.pick(
+                    (query.get("kind") or ["portrait"])[0],
+                    (query.get("same") or [""])[0],
+                    (query.get("exclude") or [""])[0],
+                )
+                self._json(200, {"ok": True, "item": item})
+            elif path == "/api/studio/image":
+                query = urllib.parse.parse_qs(parsed.query)
+                target = STUDIO.resolve_image((query.get("path") or [""])[0])
+                if target is None:
+                    self._error(404, "图片不存在或不在当前可见索引内")
+                else:
+                    self._send(200, target.read_bytes(), StudioLibrary.content_type(target))
+            elif path == "/api/studio/workflow":
+                self._json(200, {"ok": True, "workflow": build_workflow("", "", {})})
+            elif path == "/api/comfy/status":
+                self._json(200, {"ok": True, "comfy": COMFY.status()})
+            elif path == "/api/comfy/result":
+                query = urllib.parse.parse_qs(parsed.query)
+                prompt_id = (query.get("id") or [""])[0]
+                if not prompt_id:
+                    raise ValueError("缺少 id")
+                try:
+                    self._json(200, {"ok": True, **COMFY.result(prompt_id)})
+                except Exception as exc:  # noqa: BLE001
+                    self._error(502, "查询出图结果失败", COMFY.diagnose(exc))
+            elif path == "/api/comfy/view":
+                query = urllib.parse.parse_qs(parsed.query)
+                try:
+                    raw, ctype = COMFY.view(
+                        (query.get("filename") or [""])[0],
+                        (query.get("subfolder") or [""])[0],
+                        (query.get("type") or ["output"])[0],
+                    )
+                    self._send(200, raw, ctype)
+                except Exception as exc:  # noqa: BLE001
+                    self._error(502, "读取出图失败", COMFY.diagnose(exc))
             else:
                 self._error(404, f"未找到路由: {path}")
         except (OSError, ValueError) as exc:
@@ -397,6 +524,7 @@ class Handler(BaseHTTPRequestHandler):
                     POSES.lock()
                 else:
                     POSES.unlock()
+                STUDIO.load()  # 三库可见范围随成人模式变化
                 self._json(200, {"ok": True, "status": POSES.status()})
                 return
             if path == "/api/compose":
@@ -410,12 +538,17 @@ class Handler(BaseHTTPRequestHandler):
                 result = extract(image, mime, engine, cfg, LEX, str(payload.get("filename") or ""))
                 self._json(200, {"ok": True, **result})
             elif path == "/api/workflow":
-                wf = build_workflow(
+                engine = str(payload.get("engine") or WORKFLOW_ENGINE).strip().lower()
+                if engine not in WORKFLOW_ENGINES:
+                    engine = WORKFLOW_ENGINE
+                options = payload.get("options") or {}
+                wf = build_for_engine(
+                    engine,
                     str(payload.get("positive") or ""),
                     str(payload.get("negative") or ""),
-                    payload.get("options") or {},
+                    options,
                 )
-                self._json(200, {"ok": True, "workflow": wf})
+                self._json(200, {"ok": True, "workflow": wf, "engine": engine, "options": options})
             elif path == "/api/presets":
                 name = str(payload.get("name") or "").strip()[:60]
                 if not name:
@@ -441,17 +574,74 @@ class Handler(BaseHTTPRequestHandler):
                 workflow = payload.get("workflow")
                 if not isinstance(workflow, dict):
                     raise ValueError("workflow 必须是对象")
+                engine = str(payload.get("engine") or WORKFLOW_ENGINE).strip().lower()
+                if engine not in WORKFLOW_ENGINES:
+                    engine = WORKFLOW_ENGINE
+
+                # 兼容旧前端 / 外部调用传来的 SD 工作流：抽出文本后换成 Z-Image 节点
+                if engine.startswith("zimage") and not is_zimage_workflow(workflow):
+                    def _text(node_id: str, fallback: str) -> str:
+                        try:
+                            return workflow[node_id]["inputs"]["text"] or ""
+                        except (KeyError, TypeError, AttributeError):
+                            return str(payload.get(fallback) or "")
+
+                    workflow = build_for_engine(
+                        engine,
+                        _text("2", "positive"),
+                        _text("3", "negative"),
+                        payload.get("options") or {},
+                    )
+
                 body = json.dumps({"prompt": workflow, "client_id": "prompt-studio"}).encode("utf-8")
                 req = urllib.request.Request(
                     COMFYUI_URL + "/prompt", data=body,
-                    headers={"Content-Type": "application/json"}, method="POST",
+                    headers=_comfy_headers({"Content-Type": "application/json"}), method="POST",
                 )
                 try:
-                    with urllib.request.urlopen(req, timeout=15) as resp:
+                    # /prompt 只是入队，不会等出图；30s 覆盖隧道冷启动的抖动
+                    with urllib.request.urlopen(req, timeout=30) as resp:
                         answer = json.loads(resp.read().decode("utf-8", "replace"))
-                    self._json(200, {"ok": True, "response": answer, "comfyui_url": COMFYUI_URL})
+                    # 立刻唤醒归档线程，出完图后不用等下一个轮询周期
+                    GALLERY.trigger()
+                    self._json(200, {
+                        "ok": True, "response": answer,
+                        "comfyui_url": COMFYUI_URL, "engine": engine,
+                    })
                 except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-                    self._error(502, f"推送 ComfyUI 失败: {exc}", "检查 COMFYUI_URL，并确认 ComfyUI 已启动、允许跨域/API 访问")
+                    self._error(502, f"推送 ComfyUI 失败: {exc}",
+                                "检查 COMFYUI_URL / WORKFLOW_ENGINE、frp 隧道与 ComfyUI --auth 凭据")
+            elif path == "/api/comfy/upload":
+                image, _mime = decode_data_url(str(payload.get("image") or ""))
+                if len(image) > 20 * 1024 * 1024:
+                    raise ValueError("参考图超过 20 MB 上限")
+                try:
+                    uploaded = COMFY.upload_image(image, str(payload.get("name") or "reference.png"))
+                    self._json(200, {"ok": True, "uploaded": uploaded})
+                except Exception as exc:  # noqa: BLE001
+                    self._error(502, "上传参考图到 ComfyUI 失败", COMFY.diagnose(exc))
+            elif path == "/api/comfy/submit":
+                workflow = payload.get("workflow")
+                if not isinstance(workflow, dict):
+                    raise ValueError("workflow 必须是对象")
+                uploaded = payload.get("images") or []
+                if not isinstance(uploaded, list):
+                    raise ValueError("images 必须是数组")
+                try:
+                    result = COMFY.submit(
+                        workflow,
+                        str(payload.get("positive") or ""),
+                        str(payload.get("negative") or ""),
+                        uploaded,
+                    )
+                    GALLERY.trigger()  # 与已有出图归档联动
+                    self._json(200, {"ok": True, **result})
+                except Exception as exc:  # noqa: BLE001
+                    self._error(502, "提交 ComfyUI 失败", COMFY.diagnose(exc))
+            elif path == "/api/gallery/scan":
+                # 手动全量扫描：把 ComfyUI 里所有没归档过的历史出图补回来
+                result = GALLERY.scan_once(limit=0)
+                self._json(200, {"ok": True, **result, "status": GALLERY.status()})
             else:
                 self._error(404, f"未找到路由: {path}")
         except ValueError as exc:
@@ -475,10 +665,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if not self._guard(parsed.path):
                 return
+            query = urllib.parse.parse_qs(parsed.query)
+            if parsed.path == "/api/gallery":
+                record_id = (query.get("id") or [""])[0]
+                if not GALLERY.delete(record_id):
+                    self._error(404, "未找到该出图记录")
+                    return
+                self._json(200, {"ok": True, "deleted": record_id})
+                return
             if parsed.path != "/api/presets":
                 self._error(404, f"未找到路由: {parsed.path}")
                 return
-            query = urllib.parse.parse_qs(parsed.query)
             preset_id = (query.get("id") or [""])[0]
             with _PRESET_LOCK:
                 items = _user_presets()
@@ -508,12 +705,16 @@ def main() -> None:
     server.daemon_threads = True
     LOG.info("ComfyUI Prompt Studio v%s 已启动: http://0.0.0.0:%s", VERSION, PORT)
     LOG.info("数据目录=%s | 模型目录=%s | ComfyUI=%s", DATA_DIR, MODEL_DIR, COMFYUI_URL)
+    LOG.info("出图引擎=%s | 默认参数=%s | 自动归档=%s", WORKFLOW_ENGINE,
+             json.dumps(engine_defaults(WORKFLOW_ENGINE), ensure_ascii=False), GALLERY.enabled)
     LOG.info("引擎状态: %s", json.dumps(_engine_status(), ensure_ascii=False))
+    GALLERY.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         LOG.info("收到中断，正在关闭")
     finally:
+        GALLERY.stop()
         server.server_close()
 
 

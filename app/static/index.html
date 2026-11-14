@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <div id="workbenchView">
   <header class="topbar">
     <div class="brand">
       <span class="logo">PS</span>
@@ -17,6 +18,8 @@
     </div>
     <div class="top-actions">
       <div id="engineBadges" class="badges"></div>
+      <button id="studioJumpBtn" class="btn ghost" title="切换到 AI 角色合成台">AI 合成台</button>
+      <button id="galleryJumpBtn" class="btn ghost" title="查看 ComfyUI 自动归档的出图">🖼 出图归档</button>
       <button id="guideBtn" class="btn ghost">📖 编写心法</button>
       <button id="logoutBtn" class="btn ghost" title="退出登录">退出</button>
     </div>
@@ -162,12 +165,31 @@
         <button id="pushBtn" class="btn">推送到 ComfyUI</button>
       </div>
       <div class="workflow-opts">
-        <label>尺寸 <select id="wfSize"><option value="896x1152">896×1152</option><option value="1024x1024">1024×1024</option><option value="768x1280">768×1280</option><option value="1216x832">1216×832</option></select></label>
-        <label>步数 <input id="wfSteps" type="number" value="28" min="1" max="150"></label>
-        <label>CFG <input id="wfCfg" type="number" value="6.5" step="0.5" min="0" max="30"></label>
-        <label>模型文件 <input id="wfCkpt" type="text" placeholder="在 ComfyUI 里改即可"></label>
+        <label>尺寸 <select id="wfSize"><option value="1024x1024">1024×1024</option><option value="896x1152">896×1152</option><option value="768x1280">768×1280</option><option value="1216x832">1216×832</option><option value="1024x1536">1024×1536</option></select></label>
+        <label>步数 <input id="wfSteps" type="number" value="8" min="1" max="150"></label>
+        <label>CFG <input id="wfCfg" type="number" value="1" step="0.5" min="0" max="30"></label>
+        <label>模型文件 <input id="wfCkpt" type="text" placeholder="可选：覆盖模型文件名"></label>
       </div>
-      <p class="footnote">导出的是 ComfyUI <code>/prompt</code> API 工作流；导入后把 ① 号节点的 checkpoint 换成你的模型。</p>
+      <p class="footnote"><span id="engineNote">出图引擎：—</span>。导出的是 ComfyUI <code>/prompt</code> API 工作流；Z-Image-Turbo 为 CFG 1 蒸馏模型，负向提示词不生效属正常。</p>
+
+      <details class="layer-card gallery-panel" id="galleryPanel" open>
+        <summary>
+          <span><span class="l-title">出图归档</span><span class="l-sub">生成后自动存进本容器</span></span>
+          <span class="l-count" id="galleryCount"></span>
+        </summary>
+        <div class="layer-body">
+          <div id="galleryStatus" class="pose-status"></div>
+          <div class="gallery-controls">
+            <input id="gallerySearch" type="text" placeholder="搜索提示词 / 模型 / 引擎">
+            <button id="galleryRefresh" class="btn tiny">刷新</button>
+            <button id="galleryScanAll" class="btn tiny ghost" title="扫描 ComfyUI 全部历史，补回没自动归档的图">扫描全部历史</button>
+          </div>
+          <div id="galleryList" class="gallery-list"></div>
+          <div class="gallery-more">
+            <button id="galleryMore" class="btn tiny ghost hidden">加载更多</button>
+          </div>
+        </div>
+      </details>
     </section>
   </main>
 
@@ -177,7 +199,154 @@
       <article id="guideContent" class="markdown"></article>
     </div>
   </div>
+  <div id="imageModal" class="modal hidden">
+    <div class="modal-card image-modal-card">
+      <div class="modal-head">
+        <h2>出图详情</h2>
+        <button id="closeImageBtn" class="btn tiny ghost">关闭</button>
+      </div>
+      <div class="image-modal-body">
+        <div class="image-modal-pic"><img id="imageModalImg" alt="生成图片"></div>
+        <div id="imageModalMeta" class="image-modal-meta"></div>
+      </div>
+      <div class="modal-foot">
+        <button id="imageModalCopy" class="btn tiny primary">复制正向提示词</button>
+        <button id="imageModalDownload" class="btn tiny">下载原图</button>
+        <button id="imageModalDelete" class="btn tiny ghost">删除这条记录</button>
+      </div>
+    </div>
+  </div>
   <div id="toast" class="toast hidden"></div>
+  </div><!-- /workbenchView -->
+
+  <div id="studioView" class="studio hidden">
+    <div class="st-shell">
+      <aside class="st-nav">
+        <div class="st-brand">
+          <span class="st-logo">PC</span>
+          <div><strong>POSE &amp; CHARACTER</strong><small>AI 角色三合一参考</small></div>
+        </div>
+        <div class="st-nav-group">
+          <div class="st-nav-label">工作台</div>
+          <button class="st-nav-item active" data-st-nav="studio">AI 合成台 <span class="st-pro">PRO</span></button>
+          <button class="st-nav-item" data-st-nav="workbench">四层模板工作台</button>
+        </div>
+        <div class="st-nav-group">
+          <div class="st-nav-label">三大参考图库</div>
+          <button class="st-nav-item" data-st-nav="poses">姿势参考库 <span id="stCountPose">—</span></button>
+          <button class="st-nav-item" data-st-nav="costumes">服装参考库 <span id="stCountCostume">—</span></button>
+          <button class="st-nav-item" data-st-nav="portraits">人像参考库 <span id="stCountPortrait">—</span></button>
+        </div>
+        <div class="st-nav-group">
+          <div class="st-nav-label">配置与说明</div>
+          <button class="st-nav-item" data-st-nav="api">API 接口配置</button>
+          <button class="st-nav-item" data-st-nav="about">使用说明与免责声明</button>
+        </div>
+        <div class="st-nav-foot">
+          <div id="stRecipeCount">角色配方 0/3</div>
+          <button class="st-link" data-st-nav="workbench">返回旧版工作台</button>
+        </div>
+      </aside>
+
+      <div class="st-main">
+        <header class="st-top">
+          <div class="st-crumb">AI 合成台</div>
+          <div class="st-top-actions">
+            <span id="stAdultBadge" class="st-badge">SFW 安全模式</span>
+            <button id="stRandomBtn" class="st-btn ghost">随机捏人</button>
+            <span class="st-tag">AI 合成台 PRO</span>
+            <span id="stComfyStatus" class="st-conn">ComfyUI 未检测</span>
+            <button id="stComfyCheckBtn" class="st-btn ghost">检测连接</button>
+          </div>
+        </header>
+
+        <div class="st-body">
+          <div class="st-col-left">
+            <section class="st-card">
+              <div class="st-card-head">
+                <h2>1. 参考图组合</h2>
+                <div>
+                  <button id="stRandomRecipe" class="st-btn ghost small">随机</button>
+                  <button id="stCollageBtn" class="st-btn ghost small">参考拼图</button>
+                </div>
+              </div>
+              <div class="st-slots" id="stSlots"></div>
+              <div class="st-extra">
+                <span>添加附加参考图：点击上传、拖拽图片至此，或直接 Ctrl+V 粘贴</span>
+                <div class="st-extra-row">
+                  <input type="file" id="stExtraFile" accept="image/*" hidden>
+                  <button id="stExtraBtn" class="st-btn ghost small">选择图片</button>
+                  <input id="stImageUrl" type="text" placeholder="填入图片 URL">
+                  <button id="stUrlBtn" class="st-btn ghost small">添加</button>
+                </div>
+                <div id="stExtraList" class="st-extra-list"></div>
+              </div>
+            </section>
+
+            <section class="st-card">
+              <div class="st-card-head">
+                <h2>2. 模型与参数</h2>
+                <button id="stAdvancedBtn" class="st-link">高级参数</button>
+              </div>
+              <div class="st-form">
+                <div class="st-row">
+                  <label>接口协议<select id="stProtocol"><option>本地 ComfyUI（服务端代理）</option></select></label>
+                  <label>工作流模板（API 格式）<select id="stWorkflowSelect">
+                    <option value="default">默认文生图模板（API 格式）</option>
+                    <option value="custom">自定义导入的 JSON</option>
+                  </select></label>
+                </div>
+                <div class="st-btn-row">
+                  <button id="stImportBtn" class="st-btn ghost small">导入 JSON</button>
+                  <button id="stEditBtn" class="st-btn ghost small">编辑 JSON</button>
+                  <button id="stExportBtn" class="st-btn ghost small">导出 json</button>
+                  <input type="file" id="stImportFile" accept=".json,application/json" hidden>
+                </div>
+                <label>画风预设<select id="stStyle">
+                  <option value="">无预设（跟随参考图）</option>
+                  <option value="写实人像写真">写实人像写真</option>
+                  <option value="日韩杂志画报">日韩杂志画报</option>
+                  <option value="复古胶片写真">复古胶片写真</option>
+                  <option value="日系二次元插画">日系二次元插画</option>
+                  <option value="3D 次世代角色渲染">3D 次世代角色渲染</option>
+                </select></label>
+                <label>正向提示词<textarea id="stPositive" rows="3" placeholder="从四层工作台带入，或在这里直接写"></textarea></label>
+                <label>负向提示词<textarea id="stNegative" rows="2"></textarea></label>
+                <div class="st-row four" id="stAdvancedRow">
+                  <label>尺寸<select id="stSize">
+                    <option value="896x1152">896×1152</option>
+                    <option value="1024x1024">1024×1024</option>
+                    <option value="768x1280">768×1280</option>
+                  </select></label>
+                  <label>步数<input id="stSteps" type="number" value="28" min="1" max="150"></label>
+                  <label>CFG<input id="stCfg" type="number" value="6.5" step="0.5" min="0" max="30"></label>
+                  <label>Seed<input id="stSeed" type="number" value="-1"></label>
+                </div>
+                <button id="stGenerateBtn" class="st-btn primary wide">生成</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="st-col-right">
+            <section class="st-card st-result-card">
+              <h2>生成结果</h2>
+              <div id="stResultBox" class="st-result-box">
+                <div class="st-placeholder">尚未生成 · 点击左侧「生成」开始</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="stModal" class="st-modal hidden">
+      <div class="st-modal-card">
+        <div class="st-modal-head"><h3 id="stModalTitle">标题</h3><button id="stModalClose" class="st-btn ghost small">关闭</button></div>
+        <div id="stModalBody" class="st-modal-body"></div>
+      </div>
+    </div>
+    <div id="stToast" class="st-toast hidden"></div>
+  </div>
   <script src="/static/app.js"></script>
+  <script src="/static/studio.js"></script>
 </body>
 </html>

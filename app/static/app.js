@@ -14,6 +14,8 @@
     checked: new Set(),
     composeTimer: null,
     poses: null,
+    gallery: { items: [], total: 0, offset: 0, query: "", current: null, status: null, online: null },
+    galleryTimer: null,
   };
 
   async function api(path, options = {}) {
@@ -196,7 +198,7 @@
   function renderBadges(engines) {
     const box = $("engineBadges");
     box.textContent = "";
-    Object.entries(engines).forEach(([key, info]) => {
+    Object.entries(engines || {}).forEach(([key, info]) => {
       const badge = el("span", `badge ${info.available ? "on" : "off"}`, `${info.label} ${info.available ? "✓" : "○"}`);
       badge.title = info.hint || "";
       box.append(badge);
@@ -547,6 +549,193 @@
     return card;
   }
 
+  // ------------------------------------------------------------------ 出图引擎默认值
+  function applyWorkflowDefaults(health) {
+    const engine = health.workflow_engine || "sd";
+    const d = health.workflow_defaults || {};
+    const labels = {
+      sd: "SD 通用模板",
+      "zimage-gguf": "Z-Image-Turbo GGUF（8188 秋叶包）",
+      "zimage-int8": "Z-Image-Turbo INT8（8189 cu130）",
+    };
+    $("engineNote").textContent = `出图引擎：${labels[engine] || engine}`;
+    if (d.width && d.height) {
+      const value = `${d.width}x${d.height}`;
+      const select = $("wfSize");
+      let opt = [...select.options].find((o) => o.value === value);
+      if (!opt) {
+        opt = el("option", "", `${d.width}×${d.height}`);
+        opt.value = value;
+        select.append(opt);
+      }
+      select.value = value;
+    }
+    if (d.steps != null) $("wfSteps").value = d.steps;
+    if (d.cfg != null) $("wfCfg").value = d.cfg;
+    if (engine.startsWith("zimage")) {
+      $("wfCkpt").placeholder = "可选：覆盖 unet 模型文件名";
+      $("negativeOut").placeholder = "CFG=1 蒸馏模型，负向词不生效";
+    }
+  }
+
+  // ------------------------------------------------------------------ 出图归档
+  const GALLERY_PAGE = 60;
+
+  function fmtTime(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? String(ts) : d.toLocaleString("zh-CN", {
+      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  function engineLabel(engine) {
+    return ({
+      "zimage-int8": "Z-Image INT8", "zimage-gguf": "Z-Image GGUF",
+      sd: "SD", unknown: "未知",
+    })[engine] || engine || "—";
+  }
+
+  function updateGalleryStatus(status) {
+    if (!status) return;
+    state.gallery.status = status;
+    state.gallery.online = status.online;
+    const box = $("galleryStatus");
+    box.className = "pose-status" + (status.enabled && !status.online ? " off" : "");
+    const base = status.enabled
+      ? `自动归档已开启 · ComfyUI ${status.online ? "在线" : "不可达（离线时暂停轮询）"} · 共 ${status.items} 条 / ${status.images} 张图`
+      : "自动归档未开启：在 compose 里设 GALLERY_ENABLED=true";
+    box.textContent = base + (status.last_error ? ` · ${status.last_error}` : "");
+  }
+
+  async function loadGallery(reset = true) {
+    if (reset) state.gallery.offset = 0;
+    try {
+      const data = await api(`/api/gallery?limit=${GALLERY_PAGE}&offset=${state.gallery.offset}&q=${encodeURIComponent(state.gallery.query)}`);
+      state.gallery.items = reset ? data.items : state.gallery.items.concat(data.items);
+      state.gallery.total = data.total;
+      state.gallery.offset = state.gallery.items.length;
+      updateGalleryStatus(data.status);
+      renderGallery();
+    } catch (err) {
+      $("galleryList").textContent = err.message;
+    }
+  }
+
+  function renderGallery() {
+    const list = $("galleryList");
+    list.textContent = "";
+    const items = state.gallery.items;
+    if (!items.length) {
+      list.append(el("div", "pose-status", state.gallery.query
+        ? "没有匹配的出图记录" : "还没有归档图片：在 ComfyUI 里出一张图，或点「扫描全部历史」"));
+    }
+    items.forEach((item) => list.append(renderGalleryCard(item)));
+    $("galleryMore").classList.toggle("hidden", items.length >= state.gallery.total);
+    $("galleryCount").textContent = `${state.gallery.total} 条`;
+  }
+
+  function renderGalleryCard(item) {
+    const card = el("div", "gallery-card");
+    const first = (item.images || [])[0];
+    if (first) {
+      const img = document.createElement("img");
+      img.src = first.url;
+      img.alt = item.positive || item.id;
+      img.loading = "lazy";
+      img.addEventListener("click", () => openImageModal(item, 0));
+      card.append(img);
+    }
+    card.append(el("div", "gc-title", (item.positive || "（无提示词）").slice(0, 60)));
+    card.append(el("div", "gc-meta", `${engineLabel(item.engine)} · ${fmtTime(item.ts)}`));
+    const buttons = el("div", "gc-buttons");
+    const reuse = el("button", "btn tiny primary", "复用词");
+    reuse.title = "把这条正向提示词填回右侧输出框";
+    reuse.addEventListener("click", () => reusePrompt(item));
+    const open = el("button", "btn tiny ghost", "查看");
+    open.addEventListener("click", () => openImageModal(item, 0));
+    buttons.append(reuse, open);
+    card.append(buttons);
+    return card;
+  }
+
+  function reusePrompt(item) {
+    if (!item.positive) { toast("这条记录没有提示词", true); return; }
+    $("positiveOut").value = item.positive;
+    $("negativeOut").value = item.negative || "";
+    $("positiveOut").scrollIntoView({ behavior: "smooth", block: "center" });
+    toast("已把这条提示词填回右侧输出框，可直接复制或继续编辑");
+  }
+
+  function openImageModal(item, idx = 0) {
+    const images = item.images || [];
+    if (!images.length) { toast("这条记录没有图片", true); return; }
+    state.gallery.current = item;
+    const image = images[Math.min(idx, images.length - 1)];
+    $("imageModalImg").src = image.url;
+    const meta = $("imageModalMeta");
+    meta.textContent = "";
+    const rows = [
+      ["引擎", engineLabel(item.engine)],
+      ["模型", item.model || "—"],
+      ["时间", fmtTime(item.ts)],
+      ["参数", `${item.width || "?"}×${item.height || "?"} · ${item.steps ?? "?"} 步 · CFG ${item.cfg ?? "?"} · seed ${item.seed ?? "?"}`],
+      ["采样", [item.sampler, item.scheduler].filter(Boolean).join(" / ") || "—"],
+      ["图片", `${images.length} 张 · ${image.name || ""}`],
+    ];
+    rows.forEach(([key, value]) => {
+      const row = el("div", "im-row");
+      row.append(el("span", "im-key", key), el("span", "im-val", String(value)));
+      meta.append(row);
+    });
+    meta.append(el("pre", "im-prompt", item.positive || "（无提示词）"));
+    if (item.negative) meta.append(el("pre", "im-prompt", `Negative: ${item.negative}`));
+    $("imageModal").classList.remove("hidden");
+  }
+
+  function closeImageModal() {
+    $("imageModal").classList.add("hidden");
+    $("imageModalImg").removeAttribute("src");
+    state.gallery.current = null;
+  }
+
+  async function deleteCurrentRecord() {
+    const item = state.gallery.current;
+    if (!item) return;
+    if (!window.confirm("删除这条归档记录和它对应的图片文件？此操作不可恢复。")) return;
+    try {
+      await api(`/api/gallery?id=${encodeURIComponent(item.id)}`, { method: "DELETE" });
+      closeImageModal();
+      await loadGallery(true);
+      toast("已删除该出图记录");
+    } catch (err) { toast(err.message, true); }
+  }
+
+  async function scanAllHistory() {
+    const btn = $("galleryScanAll");
+    btn.disabled = true;
+    try {
+      const data = await api("/api/gallery/scan", { method: "POST", body: {} });
+      toast(`扫描完成：新增 ${data.added} 条，跳过 ${data.skipped} 条未出图任务`);
+      await loadGallery(true);
+    } catch (err) { toast(err.message + (err.hint ? ` — ${err.hint}` : ""), true); }
+    finally { btn.disabled = false; }
+  }
+
+  async function refreshGallerySilently() {
+    if (document.hidden || !$("galleryPanel").open || state.gallery.query) return;
+    try {
+      const data = await api(`/api/gallery?limit=${GALLERY_PAGE}&offset=0`);
+      if (data.total !== state.gallery.total || (data.status && data.status.online !== state.gallery.online)) {
+        state.gallery.items = data.items;
+        state.gallery.total = data.total;
+        state.gallery.offset = data.items.length;
+        renderGallery();
+      }
+      updateGalleryStatus(data.status);
+    } catch (_) { /* 后台轮询静默失败，不打扰用户 */ }
+  }
+
   // ------------------------------------------------------------------ 事件
   function bind() {
     ["modeSelect", "modelSelect", "syntaxSelect", "qualityChk", "negativeChk",
@@ -621,17 +810,62 @@
     $("workflowBtn").addEventListener("click", async () => {
       try {
         const data = await getWorkflow();
-        download("comfyui-workflow.json", JSON.stringify(data.workflow, null, 2), "application/json");
-        toast("工作流 JSON 已下载（导入 ComfyUI 后换 checkpoint）");
+        download(`comfyui-workflow-${data.engine || "sd"}.json`,
+          JSON.stringify(data.workflow, null, 2), "application/json");
+        toast(`工作流 JSON 已下载（引擎：${data.engine || "sd"}）`);
       } catch (err) { toast(err.message, true); }
     });
     $("pushBtn").addEventListener("click", async () => {
+      const btn = $("pushBtn");
+      btn.disabled = true;
       try {
         const data = await getWorkflow();
-        const pushed = await api("/api/push", { method: "POST", body: { workflow: data.workflow } });
-        toast(`已推送到 ${pushed.comfyui_url}， prompt_id=${pushed.response?.prompt_id || "?"}`);
+        const pushed = await api("/api/push", { method: "POST", body: {
+          workflow: data.workflow, engine: data.engine, options: data.options,
+        } });
+        toast(`已推送 ${pushed.engine || ""} · prompt_id=${pushed.response?.prompt_id || "?"}，出图后自动归档`);
+        // Z-Image 约 10s/张，出图完成后自动刷新画廊
+        setTimeout(() => loadGallery(true), 4000);
+        setTimeout(() => loadGallery(true), 14000);
       } catch (err) { toast(err.message + (err.hint ? ` — ${err.hint}` : ""), true); }
+      finally { btn.disabled = false; }
     });
+
+    $("galleryJumpBtn").addEventListener("click", () => {
+      $("galleryPanel").open = true;
+      $("galleryPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+      loadGallery(true);
+    });
+    $("galleryRefresh").addEventListener("click", () => loadGallery(true));
+    $("galleryScanAll").addEventListener("click", scanAllHistory);
+    $("galleryMore").addEventListener("click", () => loadGallery(false));
+    $("gallerySearch").addEventListener("input", () => {
+      clearTimeout(state.galleryTimer);
+      state.galleryTimer = setTimeout(() => {
+        state.gallery.query = $("gallerySearch").value.trim();
+        loadGallery(true);
+      }, 260);
+    });
+    $("galleryPanel").addEventListener("toggle", () => {
+      if ($("galleryPanel").open) loadGallery(true);
+    });
+    $("closeImageBtn").addEventListener("click", closeImageModal);
+    $("imageModal").addEventListener("click", (e) => {
+      if (e.target.id === "imageModal") closeImageModal();
+    });
+    $("imageModalCopy").addEventListener("click", () =>
+      copyText(state.gallery.current?.positive || "", "正向提示词"));
+    $("imageModalDownload").addEventListener("click", () => {
+      const image = (state.gallery.current?.images || [])[0];
+      if (!image) return;
+      const a = el("a");
+      a.href = image.url;
+      a.download = image.name || "comfyui-image.png";
+      document.body.append(a);
+      a.click();
+      a.remove();
+    });
+    $("imageModalDelete").addEventListener("click", deleteCurrentRecord);
 
     let poseTimer = null;
     $("poseSearch").addEventListener("input", () => {
@@ -690,7 +924,11 @@
     });
     $("closeGuideBtn").addEventListener("click", () => $("guideModal").classList.add("hidden"));
     $("guideModal").addEventListener("click", (e) => { if (e.target.id === "guideModal") $("guideModal").classList.add("hidden"); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("guideModal").classList.add("hidden"); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      $("guideModal").classList.add("hidden");
+      closeImageModal();
+    });
   }
 
   async function boot() {
@@ -703,11 +941,14 @@
       fillControls();
       renderLayers();
       renderBadges(health.engines);
+      applyWorkflowDefaults(health);
       loadPresets(presetData.presets);
       bind();
       applyPreset(presetData.presets.find((p) => p.builtin));
       composeNow();
       loadPoseStatus();
+      loadGallery(true);
+      setInterval(refreshGallerySilently, 15000);
     } catch (err) {
       $("layerPanels").textContent = `初始化失败：${err.message}`;
       toast(err.message, true);

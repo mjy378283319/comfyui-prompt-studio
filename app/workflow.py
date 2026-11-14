@@ -4,6 +4,48 @@ from __future__ import annotations
 import json
 import random
 
+try:  # 以 app.workflow 包内模块导入
+    from .zimage_workflow import MODELS as ZIMAGE_MODELS, build_zimage_workflow
+except ImportError:  # server.py 把 app/ 加进 sys.path 后以顶层模块导入
+    from zimage_workflow import MODELS as ZIMAGE_MODELS, build_zimage_workflow
+
+WORKFLOW_ENGINES = ("sd", "zimage-gguf", "zimage-int8")
+
+ENGINE_DEFAULTS = {
+    "sd": {"width": 896, "height": 1152, "steps": 28, "cfg": 6.5},
+    "zimage-gguf": {"width": 1024, "height": 1024, "steps": 8, "cfg": 1.0},
+    "zimage-int8": {"width": 1024, "height": 1024, "steps": 8, "cfg": 1.0},
+}
+
+ZIMAGE_NODE_MARKERS = {"UNETLoader", "UnetLoaderGGUF", "ModelSamplingAuraFlow"}
+
+
+def engine_defaults(engine: str) -> dict:
+    return dict(ENGINE_DEFAULTS.get((engine or "sd").strip().lower(), ENGINE_DEFAULTS["sd"]))
+
+
+def is_zimage_workflow(workflow: dict) -> bool:
+    """判断一份 API 工作流是否已是 Z-Image（避免推送时二次转换）。"""
+    if not isinstance(workflow, dict):
+        return False
+    return any(
+        isinstance(node, dict) and node.get("class_type") in ZIMAGE_NODE_MARKERS
+        for node in workflow.values()
+    )
+
+
+def build_for_engine(
+    engine: str, positive: str, negative: str, options: dict | None = None
+) -> dict:
+    """按 WORKFLOW_ENGINE 生成工作流；未知引擎回落到原 SD 模板（保持向后兼容）。"""
+    name = (engine or "sd").strip().lower()
+    if name not in WORKFLOW_ENGINES:
+        name = "sd"
+    if name.startswith("zimage"):
+        variant = "int8" if name == "zimage-int8" else "gguf"
+        return build_zimage_workflow(positive, negative, options, variant=variant)
+    return build_workflow(positive, negative, options)
+
 
 def build_workflow(positive: str, negative: str, options: dict | None = None) -> dict:
     opts = options or {}

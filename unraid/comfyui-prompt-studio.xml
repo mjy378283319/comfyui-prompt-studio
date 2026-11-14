@@ -3,7 +3,8 @@
   Unraid Docker 模板：把本文件放到
   /boot/config/plugins/dockerMan/templates-user/comfyui-prompt-studio.xml
   然后在 Docker 页点「添加容器」→ 模板下拉里选 ComfyUI Prompt Studio。
-  COMFYUI_URL 请改成 NAS 上 ComfyUI 的地址；容器内 127.0.0.1 不能指向宿主机。
+  COMFYUI_URL 默认指向 A 房 frp 隧道端口 18189（B 房 cu130 / Z-Image INT8）；
+  若 ComfyUI 就在同一台 NAS 上，改回 8188。容器内 127.0.0.1 不能指向宿主机。
   APP_PASSWORD 留空时，首次在内网直连访问 http://<NAS-IP>:8199/login 自行创建管理员；
   也可直接填入口令（至少 8 位）跳过首次设置。
 -->
@@ -15,7 +16,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/mjy378283319/comfyui-prompt-studio/issues</Support>
   <Project>https://github.com/mjy378283319/comfyui-prompt-studio</Project>
-  <Overview>ComfyUI 提示词工作台：四层模块化模板（角色固定 / 服饰与遮蔽 / 动作与场景 / 摄影与画质）、图片反推提示词、tag 与自然语言双模式输出，可导出工作流 JSON 或直接推送到 ComfyUI。内置登录页、会话保护与失败锁定，纯 Python 标准库，镜像极小。首次使用在内网创建管理员，或用 APP_PASSWORD 预设口令。</Overview>
+  <Overview>ComfyUI 提示词工作台：四层模块化模板、图片反推提示词、tag 与自然语言双模式输出，支持 Z-Image-Turbo 一键出图，并把 ComfyUI 生成的图片自动归档到持久化卷，随时查看 / 搜索 / 复用提示词。内置登录页、会话保护与失败锁定，纯 Python 标准库，镜像极小。首次使用在内网创建管理员，或用 APP_PASSWORD 预设口令。</Overview>
   <Category>Tools:AI Media:</Category>
   <WebUI>http://[IP]:[PORT:8199]/</WebUI>
   <ExtraParams>--add-host=host.docker.internal:host-gateway</ExtraParams>
@@ -62,9 +63,37 @@
       <Value>8199</Value>
       <Mode/>
     </Variable>
+    <!-- 18189 = B 房 cu130 / Z-Image INT8；18188 = 秋叶包 GGUF。
+         ComfyUI 开启鉴权时写成 http://用户名:密码@host.docker.internal:18189 -->
     <Variable>
       <Name>COMFYUI_URL</Name>
-      <Value>http://host.docker.internal:8188</Value>
+      <Value>http://host.docker.internal:18189</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>WORKFLOW_ENGINE</Name>
+      <Value>zimage-int8</Value>
+      <Mode/>
+    </Variable>
+    <!-- 出图自动归档：图片写入已持久化的 /app/data/gallery/，无需新增卷 -->
+    <Variable>
+      <Name>GALLERY_ENABLED</Name>
+      <Value>true</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>GALLERY_POLL_INTERVAL</Name>
+      <Value>8</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>GALLERY_INIT_MODE</Name>
+      <Value>from_now</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>TZ</Name>
+      <Value>Asia/Shanghai</Value>
       <Mode/>
     </Variable>
     <Variable>
@@ -115,6 +144,11 @@
     <Variable>
       <Name>POSE_ADULT_MODE</Name>
       <Value>false</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Name>DEFAULT_VIEW</Name>
+      <Value>studio</Value>
       <Mode/>
     </Variable>
   </Environment>

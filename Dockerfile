@@ -11,6 +11,7 @@ ENV PYTHONUNBUFFERED=1 \
     MODEL_DIR=/app/models/wd14 \
     REFERENCE_DIR=/app/reference \
     POSE_ADULT_MODE=false \
+    DEFAULT_VIEW=studio \
     PORT=8199 \
     COMFYUI_URL=http://127.0.0.1:8188 \
     PUID=99 \

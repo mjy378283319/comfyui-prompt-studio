@@ -18,11 +18,30 @@ services:
       PGID: 100
       PORT: 8199
 
-      # ComfyUI 地址：容器内的 127.0.0.1 指向自己，绝不能填 127.0.0.1。
-      # ComfyUI 在同一台 Unraid 上时二选一：
-      #   http://host.docker.internal:8188   （已配 extra_hosts，免填 IP）
-      #   http://192.168.x.x:8188            （填 NAS 的局域网 IP）
-      COMFYUI_URL: "http://host.docker.internal:8188"
+      # ── ComfyUI（B 房，经 A 房 frp 隧道）────────────────────────
+      # 18189 = B 房 cu130 / Z-Image INT8（主用，约 9.7s/张）
+      # 18188 = B 房秋叶包 / Z-Image GGUF
+      # 容器里的 127.0.0.1 指向自己，绝不能填 127.0.0.1。
+      # 若 ComfyUI 就在同一台 NAS 上，改回 http://host.docker.internal:8188
+      COMFYUI_URL: "http://host.docker.internal:18189"
+      # B 房 ComfyUI 开了 --auth 时，把凭据写进 URL（不要提交到仓库）：
+      # COMFYUI_URL: "http://comfyuser:你的强密码@host.docker.internal:18189"
+
+      # 出图引擎：zimage-int8（8189 cu130，推荐）/ zimage-gguf（8188）/ sd（原通用模板）
+      WORKFLOW_ENGINE: "zimage-int8"
+      # 默认首页：studio=AI 角色合成台（与上游 Studio 一致），workbench=四层工作台
+      DEFAULT_VIEW: "studio"
+
+      # ── 出图自动归档 ───────────────────────────────────────────
+      # 图片存到 ./data/gallery/YYYYMM/，复用现有持久化卷，无需新增挂载。
+      # B 房关机后仍可在工作台里查看 / 搜索 / 复用提示词。
+      GALLERY_ENABLED: "true"
+      GALLERY_POLL_INTERVAL: "8"      # 轮询秒数；ComfyUI 离线时自动退避到最多 60s
+      GALLERY_INIT_MODE: "from_now"   # from_now=只归档启动后新出的图；all=连历史一起回填
+      GALLERY_HISTORY_LIMIT: "64"     # 每轮只取最近 64 条 history，避免打爆隧道
+      GALLERY_MAX_IMAGE_MB: "20"      # 单张图上限
+      GALLERY_MAX_ITEMS: "0"          # 0=不限量；填 3000 则自动淘汰最旧记录及其图片
+      TZ: "Asia/Shanghai"
 
       # WD14 反推置信度阈值（仅挂载模型后生效）
       WD14_THRESHOLD: "0.35"
@@ -57,7 +76,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      # 用户预设持久化；首次启动会自动补齐内置词库/指南/预设，不会覆盖已有文件
+      # 用户预设 + 登录凭据 + 出图归档图片（./data/gallery/）都持久化在这里；
+      # 首次启动会自动补齐内置词库/指南/预设，不会覆盖已有文件
       - ./data:/app/data
       # 可选：放入 model.onnx + selected_tags.csv 后启用 WD14 本地反推
       - ./models:/app/models/wd14

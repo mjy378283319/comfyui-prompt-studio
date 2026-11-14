@@ -17,7 +17,16 @@ services:
       PUID: 99
       PGID: 100
       PORT: 8199
-      COMFYUI_URL: "http://host.docker.internal:8188"
+      # A 房 frp 隧道端口 → B 房 cu130 / Z-Image INT8
+      # 开 --auth 时写成 http://账号:密码@host.docker.internal:18189
+      COMFYUI_URL: "http://host.docker.internal:18189"
+      WORKFLOW_ENGINE: "zimage-int8"
+      GALLERY_ENABLED: "true"
+      GALLERY_POLL_INTERVAL: "8"
+      GALLERY_INIT_MODE: "from_now"
+      GALLERY_HISTORY_LIMIT: "64"
+      GALLERY_MAX_ITEMS: "0"
+      TZ: "Asia/Shanghai"
       WD14_THRESHOLD: "0.35"
       SESSION_TTL_DAYS: "30"
       TRUST_PROXY: "true"
@@ -30,6 +39,7 @@ services:
       REFERENCE_DIR: /app/reference
       POSE_REFERENCE_ENABLED: "true"
       POSE_ADULT_MODE: "false"
+      DEFAULT_VIEW: "studio"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

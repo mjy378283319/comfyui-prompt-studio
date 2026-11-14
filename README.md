@@ -2,6 +2,8 @@
 
 一个部署在 **Unraid / NAS** 上的 Docker 小工具：用**四层模块化模板**写高质感成年人像提示词，
 从图片反推提示词，输出 ComfyUI 可直接粘贴的正/负向提示词、工作流 JSON，或直接推送到 ComfyUI 出图队列。
+支持 **Z-Image-Turbo 一键出图**，并会把 ComfyUI 生成的图片**自动拉回并归档**到容器持久化卷，
+之后即使出图那台机器关机，也能在画廊里查看、搜索、复用当初的提示词。
 
 后端只用 **Python 标准库**，镜像约 60 MB、启动秒级、构建不需要 pip 联网；WD14 ONNX 反推是可选项。
 
@@ -31,6 +33,10 @@
 - ✅ 图生提示词：PNG 元数据（零依赖）→ WD14 ONNX 本地反推 → 外部视觉接口（按四层归位）
 - ✅ 正/负向提示词、四层分段预览、冲突与合规警告
 - ✅ 导出 `.txt`、ComfyUI 工作流 JSON、一键推送到 ComfyUI `/prompt`
+- ✅ **Z-Image-Turbo 一键出图**：`zimage-int8`（8189 cu130，约 9.7 s/张）/ `zimage-gguf`（8188 秋叶包）双变体，
+  官方参数 8 步 / CFG 1 / res_multistep / simple / AuraFlow shift 3；`sd` 仍保留原通用模板
+- ✅ **出图自动归档**：后台轮询 `/history` → 经 `/view` 把成品图拉回 `DATA_DIR/gallery/YYYYMM/`，
+  反解出提示词、seed、步数、模型、尺寸存入索引；画廊支持看大图、搜索、下载、复制词、删除
 - ✅ 预设保存/载入（持久化到挂载卷），内置 7 套成年人像模板（含 2 套私房摄影 + 1 套柔美甜欲提案板）
 - ✅ 登录界面与访问控制：首次内网创建管理员、会话 Cookie、失败锁定、反代 HTTPS、CORS/CSRF 防护
 - ✅ 合规底线：词库与反推结果过滤未成年/露骨标签，默认负向词含排除项
@@ -47,9 +53,10 @@
 cd /mnt/user/appdata/comfyui-prompt-studio
 mkdir -p data models
 
-# 1) 先把 COMFYUI_URL 改成 NAS 上 ComfyUI 的地址
-#    http://host.docker.internal:8188  或  http://192.168.x.x:8188
+# 1) COMFYUI_URL 默认已指向 A 房 frp 隧道端口 18189（→ B 房 cu130 / Z-Image INT8）
+#    若 ComfyUI 就在同一台 NAS 上，改成 http://host.docker.internal:8188 或 http://<NAS-IP>:8188
 #    ⚠️ 容器内 127.0.0.1 指向容器自己，绝对不能填 127.0.0.1
+#    确认引擎：WORKFLOW_ENGINE=zimage-int8（用 8188 秋叶包则填 zimage-gguf）
 
 docker compose pull
 docker compose up -d
@@ -77,7 +84,7 @@ docker compose -f docker-compose.build.yml build --build-arg WITH_ONNX=1
 | 项 | 容器 | 宿主机（Unraid） | 说明 |
 | --- | --- | --- | --- |
 | Web UI | 8199 | 8199 | 避开 ComfyUI 的 8188、拓竹耗材管家的 8971 |
-| 数据 | `/app/data` | `/mnt/user/appdata/comfyui-prompt-studio/data` | 用户预设 + `auth.json`（口令哈希与会话）持久化；首次启动自动补齐内置词库/指南，不覆盖已有文件 |
+| 数据 | `/app/data` | `/mnt/user/appdata/comfyui-prompt-studio/data` | 用户预设 + `auth.json` + **出图归档**（`gallery/YYYYMM/` 与 `gallery.json`）都持久化在这里；首次启动自动补齐内置词库/指南，不覆盖已有文件。**归档不需要新增卷** |
 | 模型 | `/app/models/wd14` | `.../models` | 可选，放 `model.onnx` + `selected_tags.csv` 后启用 WD14 |
 | 姿势库 | `/app/reference` | `.../ai-pose-gallery-zh` | 可选**只读**挂载，镜像内不含任何上游数据与图片 |
 | 属主 | PUID/PGID | 99 / 100 | Unraid 的 `nobody:users` |
@@ -89,7 +96,15 @@ docker compose -f docker-compose.build.yml build --build-arg WITH_ONNX=1
 | `PORT` | `8199` | 容器内监听端口 |
 | `DATA_DIR` | `/app/data` | 词库、指南、用户预设 |
 | `MODEL_DIR` | `/app/models/wd14` | WD14 模型目录 |
-| `COMFYUI_URL` | `http://127.0.0.1:8188` | 推送工作流的目标 ComfyUI；**容器部署必须改** |
+| `COMFYUI_URL` | `http://127.0.0.1:8188` | 目标 ComfyUI；**容器部署必须改**。支持内嵌凭据 `http://user:pass@host:port`（ComfyUI `--auth` 时必需，凭据不会出现在日志/响应里）。跨房经 frp 隧道时填 `http://host.docker.internal:18189` |
+| `WORKFLOW_ENGINE` | `sd` | 出图引擎：`zimage-int8` / `zimage-gguf` / `sd`。默认 `sd` 保持旧行为；用 Z-Image 必须显式设置 |
+| `GALLERY_ENABLED` | `true` | 是否开启出图自动归档 |
+| `GALLERY_POLL_INTERVAL` | `8` | 轮询 `/history` 的秒数；ComfyUI 不可达时自动指数退避（最多 60 s） |
+| `GALLERY_INIT_MODE` | `from_now` | `from_now`＝容器启动后只归档新出的图（跳过已有历史，避免启动瞬间拉回上百张旧图）；`all`＝连历史一起回填 |
+| `GALLERY_HISTORY_LIMIT` | `64` | 每轮只取最近 64 条 history，避免反复搬运完整历史打爆隧道；「扫描全部历史」按钮不受此限 |
+| `GALLERY_TIMEOUT` | `15` | 单次 ComfyUI 请求超时（秒） |
+| `GALLERY_MAX_IMAGE_MB` | `20` | 单张图大小上限，超过则跳过并记录失败 |
+| `GALLERY_MAX_ITEMS` | `0` | `0`＝不自动淘汰；填数字则只保留最近 N 条，超出部分连图片文件一起删除 |
 | `WD14_THRESHOLD` | `0.35` | WD14 置信度阈值 |
 | `REMOTE_VISION_URL` | 空 | OpenAI 兼容视觉接口 `/v1/chat/completions` |
 | `REMOTE_VISION_KEY` | 空 | Bearer Token（可选） |
@@ -107,6 +122,7 @@ docker compose -f docker-compose.build.yml build --build-arg WITH_ONNX=1
 | `REFERENCE_DIR` | `/app/reference` | 姿势参考库的只读挂载点 |
 | `POSE_REFERENCE_ENABLED` | `true` | 设为 `false` 可完全关闭姿势参考库 |
 | `POSE_ADULT_MODE` | `false` | 成人模式总开关；开启后仍需登录 + 内网直连 + 界面二次确认才解锁 |
+| `DEFAULT_VIEW` | `studio` | 默认首页：`studio`=AI 角色合成台，`workbench`=四层工作台（浏览器会记住上次选择） |
 | `PUID` / `PGID` | `99` / `100` | Unraid 卷属主 |
 
 > 访问密钥一律走环境变量，不写进代码，也不写进镜像。
@@ -200,13 +216,117 @@ docker compose up -d
 
 ---
 
-## 四、和 ComfyUI 对接
+## 四、和 ComfyUI 对接（Z-Image-Turbo 一键出图 + 自动归档）
+
+### 4.1 选引擎
+
+`WORKFLOW_ENGINE` 决定「导出工作流 JSON」和「推送到 ComfyUI」生成什么节点：
+
+| 引擎 | 对应环境 | 关键节点 | 默认参数 |
+| --- | --- | --- | --- |
+| `zimage-int8`（推荐） | B 房 cu130 / ComfyUI 0.45.0 / 8189 | `UNETLoader` + `CLIPLoader` | 1024×1024 · 8 步 · CFG 1 |
+| `zimage-gguf` | B 房秋叶包 / ComfyUI 0.44.0 / 8188 | `UnetLoaderGGUF` + `CLIPLoaderGGUF` | 同上 |
+| `sd` | 原通用模板（默认，保持旧行为） | `CheckpointLoaderSimple` | 896×1152 · 28 步 · CFG 6.5 |
+
+模型文件名写在 `app/zimage_workflow.py` 的 `MODELS` 里，也可在界面「模型文件」框覆盖
+`unet_name`。Z-Image 是 **CFG=1 的蒸馏模型，负向提示词不生效**（官方模板用
+`ConditioningZeroOut`），工作台生成的负向词可以忽略，不是配置错误。尺寸必须是 16 的倍数，
+服务端会自动向下对齐。
+
+`COMFYUI_URL` 指向真正的出图机。跨房 frp 隧道场景里，ComfyUI 在 B 房、工作台在 A 房 Unraid：
+
+```
+[手机 / 外网] ──HTTPS──▶ A房 Lucky 反代 ──▶ prompt-studio 容器(8199)
+                                              │
+                          COMFYUI_URL = http://host.docker.internal:18189
+                                              │  (A房 frps 隧道端口 → B房 frpc)
+                                              ▼
+                                    B房 ComfyUI 8189 / RTX4060 8G
+                                              │ 出图落在 B房 output/
+                                              ▼
+        /history → /view 把成品图拉回 A房 ──▶ ./data/gallery/YYYYMM/*.png
+```
+
+若 B 房 ComfyUI 开了 `--auth`，把凭据写进 URL：`http://用户名:密码@host.docker.internal:18189`。
+服务端会剥离凭据后再拼接地址、打日志、返回响应，所有 `/prompt`、`/history`、`/view`
+请求统一带上 `Authorization` 头。
+
+### 4.2 出图自动归档（"生成后自动存到 docker 里"）
+
+后台守护线程每 `GALLERY_POLL_INTERVAL` 秒拉一次 ComfyUI `/history`，
+发现**新出图**就走下面这条链路，全程不需要改 ComfyUI、不需要额外端口、不需要 SMB 共享：
+
+1. `GET /history?max_items=64` → 找出还没归档过的 `prompt_id`；
+2. `GET /view?filename=...` → 把成品图 bytes 拉回 A 房；
+3. 写入 `DATA_DIR/gallery/YYYYMM/<id>_<序号>_<原文件名>`（按月份分目录）；
+4. 从 history 里的工作流反解出**正向词、负向词、seed、步数、CFG、采样器、尺寸、模型名、引擎**，
+   连同图片相对路径写进 `DATA_DIR/gallery.json`；
+5. 工作台右栏「出图归档」自动出现新图（推送成功后会立即唤醒一次扫描，不必等下一个轮询周期）。
+
+`DATA_DIR` 就是已经挂到 Unraid 的 `./data` 卷，所以**图片是真正持久化在宿主机上的**：
+容器重建、B 房关机、隧道断开都不影响查看。宿主机路径
+`/mnt/user/appdata/comfyui-prompt-studio/data/gallery/`，可以直接在 NAS 里备份。
+
+覆盖两种出图来源：
+
+- 工作台「推送到 ComfyUI」提交的任务 —— 推送成功后立即唤醒扫描；
+- 在 ComfyUI 网页里**手动 Queue** 的任务 —— 由轮询兜底扫到。
+
+> 首次启动默认是 `GALLERY_INIT_MODE=from_now`：先把 ComfyUI 现有历史登记为"已见"，
+> **不会**把上百张旧图一次性拉回来打爆隧道。想回填历史，把该变量设为 `all`，
+> 或在画廊里点「扫描全部历史」（会拉全量 history，补回所有未归档的图）。
+> ComfyUI 不可达时线程自动退避到最多 60 s、日志降噪，不影响工作台其他功能。
+
+### 4.3 画廊能做什么
+
+| 操作 | 位置 | 说明 |
+| --- | --- | --- |
+| 看大图 / 参数 | 点缩略图或「查看」 | 显示原图、模型、seed、步数、CFG、尺寸、时间、完整提示词 |
+| 搜索 | 顶部搜索框 | 按提示词 / 模型 / 引擎 / prompt_id 模糊匹配 |
+| 复用提示词 | 卡片「复用词」 | 把这条正向词直接填回右侧输出框，接着改四层继续出图 |
+| 下载 / 复制 | 详情弹窗 | 下载原图，或复制正向提示词 |
+| 删除 | 详情弹窗 | 删记录 + 删对应图片文件；已删 id 会记进索引，重启后不会复活 |
+| 手动扫描 | 「扫描全部历史」 | 补回没被自动扫到的历史出图 |
+
+所有画廊接口都需要登录，图片接口只放行 `gallery.json` 里登记过的文件并做目录穿越校验。
+
+### 4.4 其它对接方式（保留）
 
 - **复制粘贴**：右侧「正向提示词 / 负向提示词」，直接贴进两个 `CLIPTextEncode`。
-- **导出工作流**：点「导出工作流 JSON」，导入 ComfyUI 后把 ① 号 `CheckpointLoaderSimple`
-  的 `ckpt_name` 换成你的模型即可跑。可设尺寸、步数、CFG。
-- **直接推送**：点「推送到 ComfyUI」，服务端 POST 到 `COMFYUI_URL/prompt`，返回 `prompt_id`。
-  （Flux / SD3 若工作流节点不同，建议用前两种方式。）
+- **导出工作流 JSON**：按当前引擎生成，导入 ComfyUI 即可用；`sd` 引擎仍需把 ① 号节点的
+  `ckpt_name` 换成你的模型。
+- **扫描全部历史**：见上。
+
+---
+
+## 四之二、AI 角色合成台（Studio，默认首页）
+
+按 `ai-pose-gallery-zh` 的「AI 角色合成台」版式做了同源界面：左侧竖导航、顶部连接状态、左主区
+「1. 参考图组合 / 2. 模型与参数」、右侧「生成结果」。默认打开 Docker 就是这一页；
+左侧导航可切回四层工作台，选择记在浏览器 `localStorage`；`DEFAULT_VIEW=workbench` 可改回默认工作台。
+
+**与上游 Studio 的关键差别**：上游是浏览器直连 ComfyUI，截图里的报错正是 CORS 与 `127.0.0.1`
+指向浏览器本机。本工作台的所有 ComfyUI 请求都由**服务端代理**：
+
+| 能力 | 服务端端点 | 转发到 ComfyUI |
+| --- | --- | --- |
+| 检测连接 | `/api/comfy/status` | `/system_stats` |
+| 上传参考图 | `/api/comfy/upload` | `/upload/image`（multipart） |
+| 提交工作流 | `/api/comfy/submit` | `/prompt`（自动填 `CLIPTextEncode` 与 `LoadImage`） |
+| 轮询结果 | `/api/comfy/result` | `/history/{prompt_id}` |
+| 取回成品图 | `/api/comfy/view` | `/view` |
+
+所以**不需要** `--enable-cors-header`，浏览器也不必能访问 `COMFYUI_URL`，只要容器能连到 ComfyUI 即可；
+`COMFYUI_URL` 内嵌的 `--auth` 凭据由服务端透传、不回显。提交成功后会唤醒出图归档线程，
+成品图同时出现在「出图归档」里。
+
+**界面能做**：三槽位（人像 / 服装 / 姿势）换一个 / 同类 / 移除、随机捏人、参考拼图（Canvas 合成可下载 PNG）、
+附加参考图（上传 / Ctrl+V / URL）、工作流 JSON 导入 / 编辑 / 导出、画风预设、尺寸 / 步数 / CFG / Seed、
+生成结果轮询与失败诊断。正向 / 负向提示词会自动带入四层工作台的合成结果。
+
+> 镜像与仓库仍不含任何上游代码、数据或图片，三库元数据全部来自你自行挂载的只读卷。
+> 参考图能否真正参与生成，取决于工作流里是否有 `LoadImage` / IP-Adapter / ControlNet 节点：
+> 默认模板是基础文生图，导入含这些节点的 API 工作流后会自动把第一张上传图注入 `LoadImage`。
 
 ---
 
@@ -226,13 +346,19 @@ docker compose up -d
 
 ```bash
 python -m app.server              # http://127.0.0.1:8199
-python tests/smoke_test.py        # 零依赖端到端自测
+python tests/smoke_test.py        # 原有 20 项零依赖冒烟测试
+python tests/test_gallery.py      # 出图归档 / Z-Image 端到端测试（自带假 ComfyUI）
 node --check app/static/app.js    # 前端语法检查
 ```
 
-自测覆盖：词库加载、四层合成（tag / 自然语言 / 权重 / 合规过滤）、工作流生成、
+`smoke_test.py` 覆盖：词库加载、四层合成（tag / 自然语言 / 权重 / 合规过滤）、工作流生成、
 PNG 元数据反推（含 ComfyUI workflow 正/负向节点）、登录/初始化/会话/越权/登出/改口令/Origin 校验、
 全部 HTTP 接口与错误分支。
+
+`test_gallery.py` 用本地假 ComfyUI 顶替出图机，覆盖 14 项检查：`--auth` 凭据透传与不回显、
+`/history → /view → 落盘 → 元数据反解`、Z-Image 工作流生成与 `/prompt` 推送、画廊列表/搜索/
+原图读取、路径穿越与未登录防护、手动全量扫描、删除后文件清理与重启不复活。
+两个测试都会跑在 GitHub Actions 里，不通过就不推镜像。
 
 ---
 
@@ -240,8 +366,15 @@ PNG 元数据反推（含 ComfyUI workflow 正/负向节点）、登录/初始�
 
 - 工具定位于**成年人像摄影**提示词工程；词库与反推结果均过滤未成年与露骨标签，负向词默认含合规排除项。
 - WD14 推理依赖需 `--build-arg WITH_ONNX=1` 额外安装，默认镜像不含模型与推理库。
-- 导出的工作流是 SD 系通用 `KSampler` 模板；Flux 等需换成对应节点，提示词本身可直接复用。
-- ComfyUI 推送只负责提交 `/prompt`，不查询执行结果。
+- `sd` 引擎导出的仍是 SD 系通用 `KSampler` 模板；用 Z-Image-Turbo 请把 `WORKFLOW_ENGINE`
+  设为 `zimage-int8` / `zimage-gguf`。Z-Image 的模型文件名按本机环境写死在
+  `app/zimage_workflow.py`，换量化版本时改 `MODELS` 或在界面覆盖。
+- 自动归档依赖 ComfyUI 的 `/history` 保留记录；若 B 房清空了 history 或重启了 ComfyUI，
+  历史出图可能扫不到（新出的图不受影响）。`GALLERY_INIT_MODE=from_now` 不会回填旧图，
+  需要时点「扫描全部历史」。
+- 自动归档只收 `outputs.images`（SaveImage / PreviewImage 一类），不收视频、GIF 与自定义节点输出。
+- 图片按原图 bytes 存储，不做压缩；长时间大量出图请关注 `./data` 卷容量，
+  或用 `GALLERY_MAX_ITEMS` 设上限。
 - 有登录与会话保护，但仍是**单账号**、无多用户/权限分级；公网暴露建议再叠加反代 Basic Auth 或统一认证。
 
 ## 参考来源
