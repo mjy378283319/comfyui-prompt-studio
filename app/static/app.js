@@ -465,6 +465,24 @@
         ? `已载入 ${data.count} 个 SFW 姿势 · ${data.categories.length} 个分类（仅标准系 / 上半身）`
         : data.reason;
       $("poseCount").textContent = data.available ? `${data.count} 项` : "未挂载";
+      const adultState = $("poseAdultState");
+      const adultBtn = $("poseAdultBtn");
+      if (!data.adult_mode) {
+        adultState.className = "pose-adult-state";
+        adultState.textContent = "成人模式未启用：需在 compose 设置 POSE_ADULT_MODE=true（默认关闭）";
+        adultBtn.textContent = "未启用";
+        adultBtn.disabled = true;
+      } else if (data.adult_unlocked) {
+        adultState.className = "pose-adult-state on";
+        adultState.textContent = "成人模式已解锁 · 仅限成年人 / 内网直连 · 重启容器自动回到 SFW";
+        adultBtn.textContent = "重新锁定（回到 SFW）";
+        adultBtn.disabled = false;
+      } else {
+        adultState.className = "pose-adult-state";
+        adultState.textContent = "当前 SFW。解锁后额外显示「全身单人・性感系」单人人体动态参考；双人缠绵与露骨内容始终不开放。";
+        adultBtn.textContent = "解锁成人内容（18+）";
+        adultBtn.disabled = false;
+      }
       const select = $("poseCategory");
       select.textContent = "";
       const all = el("option", "", "全部分类");
@@ -499,6 +517,10 @@
 
   function renderPoseCard(item) {
     const card = el("div", "pose-card");
+    if (item.adult) {
+      card.classList.add("adult");
+      card.title = "18+ 成人向单人人体动态参考";
+    }
     if (item.thumb) {
       const img = document.createElement("img");
       img.src = `/api/pose/image?path=${encodeURIComponent(item.thumb)}`;
@@ -623,6 +645,36 @@
     });
     $("posePanel").addEventListener("toggle", () => {
       if ($("posePanel").open && !state.poses) loadPoseStatus();
+    });
+    $("poseAdultBtn").addEventListener("click", async () => {
+      if (!state.poses || !state.poses.adult_mode) return;
+      if (state.poses.adult_unlocked) {
+        try {
+          const data = await api("/api/poses/adult", {
+            method: "POST", body: { confirm: true, ack: "adult", unlock: false },
+          });
+          state.poses = data.status;
+          await loadPoseStatus();
+          toast("已回到 SFW 模式");
+        } catch (err) { toast(err.message, true); }
+        return;
+      }
+      const agreed = window.confirm(
+        "成人模式（18+）\n\n" +
+        "· 仅限成年人使用，未成年人请勿解锁\n" +
+        "· 只额外显示「全身单人・性感系」人体动态参考；双人缠绵、露骨性行为、器具与未成年相关内容始终不开放\n" +
+        "· 图片来自你自行挂载的本地仓库，不上传、不打包进镜像\n" +
+        "· 仅允许内网直连解锁，重启容器后自动回到 SFW\n\n确认解锁？"
+      );
+      if (!agreed) return;
+      try {
+        const data = await api("/api/poses/adult", {
+          method: "POST", body: { confirm: true, ack: "adult", unlock: true },
+        });
+        state.poses = data.status;
+        await loadPoseStatus();
+        toast(data.status.adult_unlocked ? "成人模式已解锁" : "未解锁");
+      } catch (err) { toast(err.message, true); }
     });
 
     $("logoutBtn").addEventListener("click", async () => {

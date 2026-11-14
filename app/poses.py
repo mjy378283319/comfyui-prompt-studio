@@ -1,8 +1,13 @@
 """姿势参考库：可选挂载 anhao/ai-pose-gallery-zh 仓库的只读卷。
 
-镜像内不含任何上游数据与图片。只有用户自行 clone 并把仓库挂到 REFERENCE_DIR 时才启用，
-且只索引 SFW 体系（全身单人・标准系 / 上半身单人），18+ 体系与敏感姿势名一律排除；
-图片接口只放行索引内登记的路径，避免绕过过滤读取其它图片。
+镜像与仓库内不含任何上游数据与图片，全部由用户自行 clone 后以只读卷挂载。
+
+默认 SFW：只索引「全身单人・标准系 / 上半身单人」。
+成人模式（POSE_ADULT_MODE=true + 登录 + 内网直连 + 显式确认）额外开放
+「全身单人・性感系」的单人人体动态参考；「双人缠绵」及露骨性行为、
+BDSM 器具、调教、未成年或疑似未成年内容在任何模式下都不开放。
+
+解锁状态只存在进程内存，容器重启自动回到 SFW。
 """
 from __future__ import annotations
 
@@ -13,11 +18,23 @@ from pathlib import Path
 
 LOG = logging.getLogger("prompt-studio.poses")
 
-ALLOWED_SYSTEMS = {"全身单人・标准系", "上半身单人"}
-BLOCKED_NAME_PARTS = (
-    "性感", "缠绵", "后入", "後入", "挤胸", "强调臀", "裸露", "内衣",
-    "挑逗", "煽情", "诱惑", "誘惑", "痴", "淫", "SM", "拘束",
+SFW_SYSTEMS = {"全身单人・标准系", "上半身单人"}
+ADULT_SYSTEMS = {"全身单人・性感系"}
+NEVER_SYSTEMS = {"双人缠绵"}
+
+# 任何模式都不过滤掉的硬边界：未成年 / 露骨性行为 / 器具 / 调教 / 性化暴力
+HARD_BLOCKED = (
+    "loli", "shota", "lolicon", "shotacon", "child", "kid", "baby", "toddler",
+    "teen", "未成年", "幼女", "幼男", "ロリ", "ショタ",
+    "nsfw", "nude", "naked", "porn", "rape", "gore", "explicit",
+    "性交", "交配", "插入", "性器", "全裸", "裸露", "露骨",
+    "后入", "後入", "挤胸", "强调臀", "口塞", "项圈", "束缚", "拘束",
+    "捆绑", "调教", "服从", "器具", "鞭打", "SM", "痴", "淫",
+    "双人", "缠绵", "诱奸", "凌辱",
 )
+# SFW 模式额外屏蔽的成人向氛围词（成人模式下这些词不再拦截，但 HARD_BLOCKED 仍生效）
+SFW_BLOCKED = ("性感", "挑逗", "煽情", "诱惑", "誘惑", "内衣", "睡衣", "泳装", "臀部")
+
 CATEGORY_PROMPTS = [
     ("侧坐", "side-seated pose"),
     ("前倾", "leaning forward"),
@@ -44,17 +61,33 @@ def prompt_for(category: str, name: str) -> str:
 
 
 class PoseIndex:
-    def __init__(self, reference_dir: str | Path, enabled: bool = True):
+    def __init__(self, reference_dir: str | Path, enabled: bool = True, adult_mode: bool = False):
         self.dir = Path(reference_dir)
         self.enabled = enabled
+        self.adult_mode = adult_mode
+        self.adult_unlocked = False
         self.items: list[dict] = []
         self.categories: list[str] = []
-        self.allowed_paths: set[str] = set()
+        self.sfw_paths: set[str] = set()
+        self.adult_paths: set[str] = set()
         self.available = False
         self.reason = ""
         self.load()
 
+    @property
+    def unlocked(self) -> bool:
+        return self.adult_mode and self.adult_unlocked
+
+    @property
+    def active_systems(self) -> set[str]:
+        return SFW_SYSTEMS | (ADULT_SYSTEMS if self.unlocked else set())
+
     def load(self) -> None:
+        self.items = []
+        self.categories = []
+        self.sfw_paths = set()
+        self.adult_paths = set()
+        self.available = False
         if not self.enabled:
             self.reason = "POSE_REFERENCE_ENABLED=false，姿势参考库已禁用"
             return
@@ -71,18 +104,21 @@ class PoseIndex:
             self.reason = "pose-zh.json 结构不是数组"
             return
 
+        systems = self.active_systems
+        blocked = HARD_BLOCKED if self.unlocked else (HARD_BLOCKED + SFW_BLOCKED)
         grouped: dict[tuple[str, str], dict] = {}
         for row in rows:
             if not isinstance(row, dict):
                 continue
             system = str(row.get("体系") or "")
-            if system not in ALLOWED_SYSTEMS:
+            if system in NEVER_SYSTEMS or system not in systems:
                 continue
             name = str(row.get("姿势名称") or "").strip()
-            if not name or any(part in name for part in BLOCKED_NAME_PARTS):
+            if not name or any(part.lower() in name.lower() for part in blocked):
                 continue
             category = str(row.get("分类") or "未分类").strip()
             angle = str(row.get("角度") or "").strip()
+            is_adult = system in ADULT_SYSTEMS
             key = (system, str(row.get("姿势编号") or name))
             thumb = str(row.get("缩略图") or "")
             full = str(row.get("原图") or "")
@@ -96,6 +132,7 @@ class PoseIndex:
                     "thumb": thumb,
                     "full": full,
                     "prompt": prompt_for(category, name),
+                    "adult": is_adult,
                 }
             item = grouped[key]
             if angle and angle not in item["angles"]:
@@ -105,29 +142,49 @@ class PoseIndex:
             if not item["full"] and full:
                 item["full"] = full
 
-        self.items = sorted(grouped.values(), key=lambda x: (x["category"], x["name"]))
+        self.items = sorted(grouped.values(), key=lambda x: (x["adult"], x["category"], x["name"]))
         self.categories = sorted({item["category"] for item in self.items})
         for item in self.items:
+            bucket = self.adult_paths if item["adult"] else self.sfw_paths
             for path in (item["thumb"], item["full"]):
                 if path and not path.startswith("/") and ".." not in Path(path).parts:
-                    self.allowed_paths.add(path)
+                    bucket.add(path)
         self.available = bool(self.items)
-        if not self.items:
-            self.reason = "姿势库中没有可用的 SFW 记录"
-        else:
-            LOG.info("姿势参考库已载入：%s 个 SFW 姿势 / %s 个分类 / %s 个图片路径",
-                     len(self.items), len(self.categories), len(self.allowed_paths))
+        self.reason = "" if self.items else "姿势库中没有可用记录"
+        if self.items:
+            LOG.info("姿势参考库已载入：%s 个姿势（成人 %s）/ %s 个分类 / 解锁=%s",
+                     len(self.items), sum(1 for i in self.items if i["adult"]),
+                     len(self.categories), self.unlocked)
+
+    def unlock(self) -> None:
+        if not self.enabled or not self.adult_mode:
+            raise PermissionError("成人模式未启用：需在 compose 中设置 POSE_ADULT_MODE=true")
+        self.adult_unlocked = True
+        self.load()
+        LOG.info("成人模式已解锁（仅限成年人 / 内网直连 / 本次容器运行）")
+
+    def lock(self) -> None:
+        self.adult_unlocked = False
+        self.load()
+        LOG.info("已回到 SFW 模式")
 
     def status(self) -> dict:
         return {
             "available": self.available,
             "enabled": self.enabled,
             "count": len(self.items),
+            "adult_count": sum(1 for item in self.items if item["adult"]),
             "categories": self.categories,
-            "systems": sorted(ALLOWED_SYSTEMS),
+            "systems": sorted(self.active_systems),
+            "adult_mode": self.adult_mode,
+            "adult_unlocked": self.unlocked,
             "reference_dir": str(self.dir),
             "reason": self.reason,
-            "note": "仅索引 SFW 体系；镜像不含上游数据与图片，版权归原作者所有。",
+            "note": (
+                "成人模式已解锁：仅限成年人、仅限内网直连，重启容器自动回到 SFW。"
+                if self.unlocked else
+                "默认 SFW；镜像不含上游数据与图片，版权归原作者所有。"
+            ),
         }
 
     def search(self, query: str = "", category: str = "", limit: int = 60) -> list[dict]:
@@ -144,8 +201,9 @@ class PoseIndex:
         return result
 
     def resolve_image(self, relative: str) -> Path | None:
-        """只放行索引内登记的 SFW 图片路径，并做目录穿越防护。"""
-        if relative not in self.allowed_paths:
+        """只放行索引内登记的路径：未解锁时仅 SFW，解锁后含成人体系；始终做目录穿越校验。"""
+        allowed = self.sfw_paths | (self.adult_paths if self.unlocked else set())
+        if relative not in allowed:
             return None
         root = self.dir.resolve()
         target = (self.dir / relative).resolve()

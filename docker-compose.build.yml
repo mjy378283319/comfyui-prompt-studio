@@ -29,6 +29,7 @@ services:
       # APP_USERNAME: "admin"
       REFERENCE_DIR: /app/reference
       POSE_REFERENCE_ENABLED: "true"
+      POSE_ADULT_MODE: "false"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

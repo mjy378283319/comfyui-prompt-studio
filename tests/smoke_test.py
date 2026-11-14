@@ -253,6 +253,58 @@ class CoreTests(unittest.TestCase):
             self.assertFalse(empty.available)
             self.assertIn("未挂载", empty.status()["reason"])
 
+    def test_pose_adult_mode(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for sub in ("data", "thumbs", "img"):
+                (root / sub).mkdir()
+            rows = [
+                {"id": "std_P001_front", "体系": "全身单人・标准系", "姿势编号": "P001",
+                 "分类": "站姿", "姿势名称": "站立・双手撩发", "角度": "正面",
+                 "缩略图": "thumbs/std.jpg", "原图": "img/std.png"},
+                {"id": "sexy_P001_front", "体系": "全身单人・性感系", "姿势编号": "S001",
+                 "分类": "站姿", "姿势名称": "S形站姿・胯部侧顶", "角度": "正面",
+                 "缩略图": "thumbs/adult.jpg", "原图": "img/adult.png"},
+                {"id": "sexy_P002_front", "体系": "全身单人・性感系", "姿势编号": "S002",
+                 "分类": "站姿", "姿势名称": "手扶墙顶胯（站立后入待位）", "角度": "正面",
+                 "缩略图": "thumbs/blocked.jpg", "原图": "img/blocked.png"},
+                {"id": "couple_P001_front", "体系": "双人缠绵", "姿势编号": "C001",
+                 "分类": "拥抱", "姿势名称": "相拥", "角度": "正面",
+                 "缩略图": "thumbs/couple.jpg", "原图": "img/couple.png"},
+                {"id": "minor_P001_front", "体系": "全身单人・性感系", "姿势编号": "M001",
+                 "分类": "站姿", "姿势名称": "loli 站姿", "角度": "正面",
+                 "缩略图": "thumbs/minor.jpg", "原图": "img/minor.png"},
+            ]
+            (root / "data" / "pose-zh.json").write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+            for name in ("adult.jpg", "blocked.jpg", "couple.jpg", "minor.jpg"):
+                (root / "thumbs" / name).write_bytes(b"x")
+            (root / "thumbs" / "std.jpg").write_bytes(b"sfw")
+
+            index = PoseIndex(root, adult_mode=True)
+            self.assertFalse(index.status()["adult_unlocked"])
+            self.assertEqual(index.status()["adult_count"], 0)
+            self.assertIsNone(index.resolve_image("thumbs/adult.jpg"))
+            self.assertTrue(index.resolve_image("thumbs/std.jpg"))
+
+            index.unlock()
+            self.assertTrue(index.status()["adult_unlocked"])
+            self.assertEqual(index.status()["adult_count"], 1)  # 只放行 1 条合规单人成人姿势
+            names = [item["name"] for item in index.items]
+            self.assertIn("S形站姿・胯部侧顶", names)
+            self.assertNotIn("手扶墙顶胯（站立后入待位）", names)  # 硬边界词
+            self.assertNotIn("相拥", names)  # 双人缠绵始终排除
+            self.assertNotIn("loli 站姿", names)  # 未成年相关始终排除
+            self.assertEqual(index.resolve_image("thumbs/adult.jpg").read_bytes(), b"x")
+            self.assertIsNone(index.resolve_image("thumbs/couple.jpg"))
+            self.assertIsNone(index.resolve_image("thumbs/blocked.jpg"))
+
+            index.lock()
+            self.assertEqual(index.status()["adult_count"], 0)
+            self.assertIsNone(index.resolve_image("thumbs/adult.jpg"))
+
+            with self.assertRaises(PermissionError):
+                PoseIndex(root, adult_mode=False).unlock()
+
     def test_auth_primitives(self):
         stored = hash_password("Passw0rd!")
         self.assertTrue(stored.startswith("pbkdf2_sha256$"))
@@ -519,6 +571,49 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 404)  # 18+ 图片不在白名单
         status, _, _ = self.raw("/api/pose/image?path=..%2Fdata%2Fpose-zh.json")
         self.assertEqual(status, 404)  # 目录穿越被拒
+
+    def test_pose_adult_endpoint(self):
+        import server
+        ref = Path(self.tmp.name) / "reference"
+        for sub in ("data", "thumbs", "img"):
+            (ref / sub).mkdir(parents=True, exist_ok=True)
+        rows = [
+            {"id": "std_P001_front", "体系": "全身单人・标准系", "姿势编号": "P001",
+             "分类": "站姿", "姿势名称": "站立・双手撩发", "角度": "正面",
+             "缩略图": "thumbs/std.jpg", "原图": "img/std.png"},
+            {"id": "sexy_P001_front", "体系": "全身单人・性感系", "姿势编号": "S001",
+             "分类": "站姿", "姿势名称": "S形站姿・胯部侧顶", "角度": "正面",
+             "缩略图": "thumbs/adult.jpg", "原图": "img/adult.png"},
+        ]
+        (ref / "data" / "pose-zh.json").write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+        (ref / "thumbs" / "std.jpg").write_bytes(b"SFW")
+        (ref / "thumbs" / "adult.jpg").write_bytes(b"ADULT")
+        server.POSES = server.PoseIndex(ref, True, True)
+
+        status, _, _ = self.call("/api/poses/adult", "POST", {"confirm": True, "ack": "adult"})
+        self.assertEqual(status, 401)  # 未登录不能解锁
+        self.do_setup()
+        status, _, _ = self.call("/api/poses/adult", "POST", {"ack": "adult"})
+        self.assertEqual(status, 400)  # 缺少显式确认
+        status, data, _ = self.call("/api/poses/adult", "POST", {"confirm": True, "ack": "adult"})
+        self.assertEqual(status, 200)
+        self.assertTrue(data["status"]["adult_unlocked"])
+        self.assertEqual(data["status"]["adult_count"], 1)
+        status, _, body = self.raw("/api/pose/image?path=thumbs%2Fadult.jpg")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"ADULT")
+
+        status, data, _ = self.call("/api/poses/adult", "POST",
+                                    {"confirm": True, "ack": "adult", "unlock": False})
+        self.assertEqual(status, 200)
+        self.assertFalse(data["status"]["adult_unlocked"])
+        status, _, _ = self.raw("/api/pose/image?path=thumbs%2Fadult.jpg")
+        self.assertEqual(status, 404)
+
+        server.POSES = server.PoseIndex(ref, True, False)  # 环境变量关闭
+        status, data, _ = self.call("/api/poses/adult", "POST", {"confirm": True, "ack": "adult"})
+        self.assertEqual(status, 403)
+        self.assertIn("POSE_ADULT_MODE", data["error"])
 
     def test_security(self):
         # 跨站 Origin 直接拒绝，不再有 Access-Control-Allow-Origin: *

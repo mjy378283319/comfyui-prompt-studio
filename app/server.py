@@ -22,7 +22,7 @@ ROOT_DIR = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-from auth import Auth, AuthError, is_https  # noqa: E402
+from auth import Auth, AuthError, is_https, is_private_host  # noqa: E402
 from poses import PoseIndex  # noqa: E402
 from composer import compose  # noqa: E402
 from extract import EngineUnavailable, decode_data_url, extract  # noqa: E402
@@ -77,6 +77,7 @@ ALLOWED_ORIGINS = [
 # 可选：挂载 anhao/ai-pose-gallery-zh 仓库（只读）。镜像内不含任何上游数据/图片。
 REFERENCE_DIR = Path(os.environ.get("REFERENCE_DIR") or (ROOT_DIR / "reference"))
 POSE_REFERENCE_ENABLED = _env_bool("POSE_REFERENCE_ENABLED", True)
+POSE_ADULT_MODE = _env_bool("POSE_ADULT_MODE", False)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 LOG = logging.getLogger("prompt-studio")
@@ -100,7 +101,7 @@ AUTH = Auth(
 )
 LOG.info("登录保护：%s", "已启用（管理员已创建）" if AUTH.initialized else "待首次在内网创建管理员")
 
-POSES = PoseIndex(REFERENCE_DIR, POSE_REFERENCE_ENABLED)
+POSES = PoseIndex(REFERENCE_DIR, POSE_REFERENCE_ENABLED, POSE_ADULT_MODE)
 LOG.info("姿势参考库：%s", POSES.status()["reason"] or f"已载入 {len(POSES.items)} 个 SFW 姿势")
 
 _PRESET_LOCK = threading.Lock()
@@ -385,6 +386,19 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if not self._guard(path):
                 return
+            if path == "/api/poses/adult":
+                if payload.get("confirm") is not True or str(payload.get("ack") or "") != "adult":
+                    raise ValueError("需要显式确认：confirm=true 且 ack=adult")
+                if not POSES.adult_mode:
+                    raise PermissionError("成人模式未启用：在 compose 中设置 POSE_ADULT_MODE=true")
+                if not is_private_host(self.peer_ip):
+                    raise PermissionError("成人模式只能在内网直连时解锁")
+                if payload.get("unlock") is False:
+                    POSES.lock()
+                else:
+                    POSES.unlock()
+                self._json(200, {"ok": True, "status": POSES.status()})
+                return
             if path == "/api/compose":
                 self._json(200, {"ok": True, **compose(payload, LEX)})
             elif path == "/api/extract":
@@ -444,6 +458,8 @@ class Handler(BaseHTTPRequestHandler):
             self._error(400, str(exc))
         except AuthError as exc:
             self._json(400, {"ok": False, "error": str(exc)})
+        except PermissionError as exc:
+            self._error(403, str(exc))
         except EngineUnavailable as exc:
             self._json(422, {"ok": False, "error": "引擎不可用", "hint": str(exc)})
         except Exception as exc:  # noqa: BLE001

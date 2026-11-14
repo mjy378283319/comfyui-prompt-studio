@@ -112,6 +112,11 @@
       <Value>true</Value>
       <Mode/>
     </Variable>
+    <Variable>
+      <Name>POSE_ADULT_MODE</Name>
+      <Value>false</Value>
+      <Mode/>
+    </Variable>
   </Environment>
   <Labels/>
   <Shell>sh</Shell>
